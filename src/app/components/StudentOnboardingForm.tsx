@@ -1,3 +1,4 @@
+import { API_URL } from "../config/api.config";
 import { useState, useEffect } from "react";
 import { User, Phone, CheckCircle, Hash, Building, DoorOpen } from "lucide-react";
 import { Card, CardContent } from "./ui/card";
@@ -53,7 +54,7 @@ export function StudentOnboardingForm({ hostelId, onComplete }: StudentOnboardin
     // Fetch available rooms
     const fetchRooms = async () => {
       try {
-        const response = await fetch(`http://localhost:5000/api/rooms/${hostelId}`);
+        const response = await fetch(`${API_URL}/api/rooms/${hostelId}`);
         const data = await response.json();
         if (response.ok) {
           setBlocks(data.blocks || []);
@@ -90,7 +91,7 @@ export function StudentOnboardingForm({ hostelId, onComplete }: StudentOnboardin
     const currentUser = auth.currentUser;
     
     try {
-      const response = await fetch("http://localhost:5000/api/auth/complete-onboarding", {
+      const response = await fetch(`${API_URL}/api/auth/complete-onboarding`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

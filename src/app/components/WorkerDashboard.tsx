@@ -1,3 +1,4 @@
+import { API_URL } from "../config/api.config";
 import { motion } from "motion/react";
 import { AlertCircle, CheckCircle, Clock, Building2, LogOut, Bell } from "lucide-react";
 import { Card, CardContent } from "./ui/card";
@@ -24,14 +25,14 @@ export function WorkerDashboard({ onComplaintClick, onNavigate, onLogout, onNoti
         const uid = auth.currentUser?.uid;
         if (!uid) return;
         
-        const userRes = await fetch(`http://localhost:5000/api/auth/user/${uid}`);
+        const userRes = await fetch(`${API_URL}/api/auth/user/${uid}`);
         if (!userRes.ok) return;
         const data = await userRes.json();
         setUserData(data.user);
         setHostelData(data.hostel);
         
         // Fetch queue
-        const cmpRes = await fetch(`http://localhost:5000/api/complaints/${data.hostel._id}`);
+        const cmpRes = await fetch(`${API_URL}/api/complaints/${data.hostel._id}`);
         if (cmpRes.ok) {
            const cmpData = await cmpRes.json();
            // Filter for pending universally or assigned to this worker specifically

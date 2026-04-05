@@ -1,3 +1,4 @@
+import { API_URL } from "../config/api.config";
 import { useState } from "react";
 import { motion } from "motion/react";
 import { User, Wrench, Shield, Building2, Mail, Lock, Eye, EyeOff } from "lucide-react";
@@ -84,7 +85,7 @@ export function RoleSelectionLogin({ onLogin, onSignupComplete }: RoleSelectionL
 
         // 2. Sync the new user with the backend (this will return needsOnboarding: true)
         const idToken = await newUser.getIdToken();
-        await fetch("http://localhost:5000/api/auth/sync", {
+        await fetch(`${API_URL}/api/auth/sync`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ idToken, role: selectedRole })
@@ -102,7 +103,7 @@ export function RoleSelectionLogin({ onLogin, onSignupComplete }: RoleSelectionL
 
         // 2. Sync with backend to find existing MongoDB record
         const idToken = await existingUser.getIdToken();
-        const response = await fetch("http://localhost:5000/api/auth/sync", {
+        const response = await fetch(`${API_URL}/api/auth/sync`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ idToken, role: selectedRole })
@@ -146,7 +147,7 @@ export function RoleSelectionLogin({ onLogin, onSignupComplete }: RoleSelectionL
       
       // Sync with backend
       const idToken = await result.user.getIdToken();
-      const response = await fetch("http://localhost:5000/api/auth/sync", {
+      const response = await fetch(`${API_URL}/api/auth/sync`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ idToken, role: selectedRole })

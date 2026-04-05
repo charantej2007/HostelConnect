@@ -1,3 +1,4 @@
+import { API_URL } from "../config/api.config";
 import { useState } from "react";
 import { Building2, User, Phone, ArrowRight } from "lucide-react";
 import { Card, CardContent } from "./ui/card";
@@ -41,7 +42,7 @@ export function AdminSetup({ onComplete }: AdminSetupProps) {
     setIsLoading(true);
 
     try {
-      const response = await fetch("http://localhost:5000/api/auth/admin-signup", {
+      const response = await fetch(`${API_URL}/api/auth/admin-signup`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

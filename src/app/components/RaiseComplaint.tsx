@@ -1,3 +1,4 @@
+import { API_URL } from "../config/api.config";
 import { useState } from "react";
 import { ArrowLeft, Upload, X } from "lucide-react";
 import { Button } from "./ui/button";
@@ -43,11 +44,11 @@ export function RaiseComplaint({ onBack, onSubmit }: RaiseComplaintProps) {
         const uid = auth.currentUser?.uid;
         if (!uid) return;
         
-        const roomRes = await fetch(`http://localhost:5000/api/rooms/student/${uid}`);
+        const roomRes = await fetch(`${API_URL}/api/rooms/student/${uid}`);
         if (!roomRes.ok) throw new Error("Failed to authenticate student");
         const data = await roomRes.json();
         
-        const res = await fetch(`http://localhost:5000/api/complaints`, {
+        const res = await fetch(`${API_URL}/api/complaints`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({

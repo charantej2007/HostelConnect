@@ -1,3 +1,4 @@
+import { API_URL } from "../config/api.config";
 import { User, Mail, Phone, MapPin, Building2, Calendar, LogOut, Key, Pencil, Save, X, Copy } from "lucide-react";
 import { Card, CardContent } from "./ui/card";
 import { Button } from "./ui/button";
@@ -31,7 +32,7 @@ export function Profile({ onBack, onLogout, userRole }: ProfileProps) {
       if (!uid) return;
 
       try {
-        const res = await fetch(`http://localhost:5000/api/auth/user/${uid}`);
+        const res = await fetch(`${API_URL}/api/auth/user/${uid}`);
         if (!res.ok) return;
         const data = await res.json();
         setUserData(data.user);
@@ -41,13 +42,13 @@ export function Profile({ onBack, onLogout, userRole }: ProfileProps) {
 
         // For students, fetch room info
         if (userRole === "student") {
-          const roomRes = await fetch(`http://localhost:5000/api/rooms/student/${uid}`);
+          const roomRes = await fetch(`${API_URL}/api/rooms/student/${uid}`);
           if (roomRes.ok) {
             const roomInfo = await roomRes.json();
             setRoomData(roomInfo.room);
             // Fetch complaint stats
             if (roomInfo.hostel?._id && data.user?._id) {
-              const cmpRes = await fetch(`http://localhost:5000/api/complaints/${roomInfo.hostel._id}?student_id=${data.user._id}`);
+              const cmpRes = await fetch(`${API_URL}/api/complaints/${roomInfo.hostel._id}?student_id=${data.user._id}`);
               if (cmpRes.ok) {
                 const cmps = await cmpRes.json();
                 setComplaintStats({
@@ -62,7 +63,7 @@ export function Profile({ onBack, onLogout, userRole }: ProfileProps) {
 
         // For workers, fetch their complaint task stats
         if (userRole === "worker" && data.hostel?._id) {
-          const cmpRes = await fetch(`http://localhost:5000/api/complaints/${data.hostel._id}`);
+          const cmpRes = await fetch(`${API_URL}/api/complaints/${data.hostel._id}`);
           if (cmpRes.ok) {
             const cmps = await cmpRes.json();
             const mine = cmps.filter((c: any) => c.worker_id?._id === data.user._id || c.worker_id === data.user._id);
@@ -85,7 +86,7 @@ export function Profile({ onBack, onLogout, userRole }: ProfileProps) {
     if (!uid) return;
     setIsSaving(true);
     try {
-      const res = await fetch(`http://localhost:5000/api/auth/user/${uid}`, {
+      const res = await fetch(`${API_URL}/api/auth/user/${uid}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: editName, phone_number: editPhone }),

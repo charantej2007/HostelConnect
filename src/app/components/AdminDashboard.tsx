@@ -1,3 +1,4 @@
+import { API_URL } from "../config/api.config";
 import { motion } from "motion/react";
 import { FileText, AlertCircle, Users, TrendingUp, Clock, CheckCircle, Building2, Settings, LogOut, Bell } from "lucide-react";
 import { Card, CardContent } from "./ui/card";
@@ -24,14 +25,14 @@ export function AdminDashboard({ onNavigate, onComplaintClick, onLogout, onNotif
         const uid = auth.currentUser?.uid;
         if (!uid) return;
         
-        const infoRes = await fetch(`http://localhost:5000/api/hostels/admin-info/${uid}`);
+        const infoRes = await fetch(`${API_URL}/api/hostels/admin-info/${uid}`);
         if (!infoRes.ok) return;
         const info = await infoRes.json();
         
-        const statsRes = await fetch(`http://localhost:5000/api/hostels/${info.hostel._id}/stats`);
+        const statsRes = await fetch(`${API_URL}/api/hostels/${info.hostel._id}/stats`);
         if (statsRes.ok) setStatsData(await statsRes.json());
         
-        const cmpRes = await fetch(`http://localhost:5000/api/complaints/${info.hostel._id}`);
+        const cmpRes = await fetch(`${API_URL}/api/complaints/${info.hostel._id}`);
         if (cmpRes.ok) {
             const cmpData = await cmpRes.json();
             const mapped: Complaint[] = cmpData.slice(0, 5).map((c: any) => ({

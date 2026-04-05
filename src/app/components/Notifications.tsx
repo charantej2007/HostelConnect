@@ -1,3 +1,4 @@
+import { API_URL } from "../config/api.config";
 import { useState, useEffect } from "react";
 import { ArrowLeft, Bell, CheckCircle, Clock, AlertCircle, Wrench, FileText } from "lucide-react";
 import { Card, CardContent } from "./ui/card";
@@ -76,7 +77,7 @@ export function Notifications({ onBack, userRole }: NotificationsProps) {
         let studentId: string | null = null;
 
         // Get user data
-        const userRes = await fetch(`http://localhost:5000/api/auth/user/${uid}`);
+        const userRes = await fetch(`${API_URL}/api/auth/user/${uid}`);
         if (userRes.ok) {
           const data = await userRes.json();
           userId = data.user?._id;
@@ -84,7 +85,7 @@ export function Notifications({ onBack, userRole }: NotificationsProps) {
         }
 
         if (userRole === "student") {
-          const roomRes = await fetch(`http://localhost:5000/api/rooms/student/${uid}`);
+          const roomRes = await fetch(`${API_URL}/api/rooms/student/${uid}`);
           if (roomRes.ok) {
             const rd = await roomRes.json();
             hostelId = rd.hostel?._id || hostelId;
@@ -96,8 +97,8 @@ export function Notifications({ onBack, userRole }: NotificationsProps) {
 
         // Fetch complaints
         const url = userRole === "student" && studentId
-          ? `http://localhost:5000/api/complaints/${hostelId}?student_id=${studentId}`
-          : `http://localhost:5000/api/complaints/${hostelId}`;
+          ? `${API_URL}/api/complaints/${hostelId}?student_id=${studentId}`
+          : `${API_URL}/api/complaints/${hostelId}`;
 
         const cmpRes = await fetch(url);
         if (!cmpRes.ok) { setLoading(false); return; }

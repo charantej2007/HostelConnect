@@ -1,3 +1,4 @@
+import { API_URL } from "../config/api.config";
 import { ArrowLeft, User, MapPin, Calendar, CheckCircle } from "lucide-react";
 import { auth } from "../config/firebase.config";
 import { Button } from "./ui/button";
@@ -39,7 +40,7 @@ export function ComplaintDetail({ complaint, onBack, userRole }: ComplaintDetail
     setIsLoading(true);
     try {
       const uid = auth.currentUser?.uid;
-      const res = await fetch(`http://localhost:5000/api/complaints/${fullId}/assign`, {
+      const res = await fetch(`${API_URL}/api/complaints/${fullId}/assign`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ worker_uid: uid })
@@ -60,7 +61,7 @@ export function ComplaintDetail({ complaint, onBack, userRole }: ComplaintDetail
   const handleMarkCompleted = async () => {
     setIsLoading(true);
     try {
-      const res = await fetch(`http://localhost:5000/api/complaints/${fullId}/complete`, {
+      const res = await fetch(`${API_URL}/api/complaints/${fullId}/complete`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" }
       });

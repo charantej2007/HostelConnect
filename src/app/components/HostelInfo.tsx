@@ -1,3 +1,4 @@
+import { API_URL } from "../config/api.config";
 import { useState, useEffect } from "react";
 import { ArrowLeft, Building2, Phone, MessageCircle, User, Wifi, Utensils, Dumbbell, BookOpen, Shield, Camera } from "lucide-react";
 import { Card, CardContent } from "./ui/card";
@@ -26,7 +27,7 @@ export function HostelInfo({ onBack }: HostelInfoProps) {
         let hostelId: string | null = null;
 
         // Try student room lookup first
-        const roomRes = await fetch(`http://localhost:5000/api/rooms/student/${uid}`);
+        const roomRes = await fetch(`${API_URL}/api/rooms/student/${uid}`);
         if (roomRes.ok) {
           const data = await roomRes.json();
           hostelId = data.hostel?._id || null;
@@ -34,7 +35,7 @@ export function HostelInfo({ onBack }: HostelInfoProps) {
 
         // If not a student, get via user record
         if (!hostelId) {
-          const userRes = await fetch(`http://localhost:5000/api/auth/user/${uid}`);
+          const userRes = await fetch(`${API_URL}/api/auth/user/${uid}`);
           if (userRes.ok) {
             const data = await userRes.json();
             hostelId = data.hostel?._id || data.user?.hostel_id || null;
@@ -44,7 +45,7 @@ export function HostelInfo({ onBack }: HostelInfoProps) {
         if (!hostelId) { setLoading(false); return; }
 
         // Step 2: Fetch full hostel details including blocks
-        const hostelRes = await fetch(`http://localhost:5000/api/hostels/${hostelId}/info`);
+        const hostelRes = await fetch(`${API_URL}/api/hostels/${hostelId}/info`);
         if (hostelRes.ok) {
           const data = await hostelRes.json();
           setHostel(data.hostel);

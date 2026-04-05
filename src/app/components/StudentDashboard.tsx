@@ -1,3 +1,4 @@
+import { API_URL } from "../config/api.config";
 import { motion } from "motion/react";
 import { FileText, Search, Home, Building2, Bell, User, LogOut } from "lucide-react";
 import { Card, CardContent } from "./ui/card";
@@ -22,14 +23,14 @@ export function StudentDashboard({ onNavigate, onLogout, onNotifications }: Stud
         const uid = auth.currentUser?.uid;
         if (!uid) return;
         
-        const roomRes = await fetch(`http://localhost:5000/api/rooms/student/${uid}`);
+        const roomRes = await fetch(`${API_URL}/api/rooms/student/${uid}`);
         if (!roomRes.ok) return;
         const data = await roomRes.json();
         setUserData(data.user);
         setRoomData(data.room);
         
         // Fetch complaints
-        const cmpRes = await fetch(`http://localhost:5000/api/complaints/${data.hostel._id}?student_id=${data.user._id}`);
+        const cmpRes = await fetch(`${API_URL}/api/complaints/${data.hostel._id}?student_id=${data.user._id}`);
         if (cmpRes.ok) {
            const complaints = await cmpRes.json();
            setActiveComplaintsCount(complaints.filter((c:any) => c.status !== 'Completed').length);

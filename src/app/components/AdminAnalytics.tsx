@@ -1,3 +1,4 @@
+import { API_URL } from "../config/api.config";
 import { motion } from "motion/react";
 import { FileText, AlertCircle, Users, Clock, ArrowLeft } from "lucide-react";
 import { Card, CardContent } from "./ui/card";
@@ -17,11 +18,11 @@ export function AdminAnalytics({ onBack }: AdminAnalyticsProps) {
         const uid = auth.currentUser?.uid;
         if (!uid) return;
         
-        const infoRes = await fetch(`http://localhost:5000/api/hostels/admin-info/${uid}`);
+        const infoRes = await fetch(`${API_URL}/api/hostels/admin-info/${uid}`);
         if (!infoRes.ok) return;
         const info = await infoRes.json();
         
-        const statsRes = await fetch(`http://localhost:5000/api/hostels/${info.hostel._id}/stats`);
+        const statsRes = await fetch(`${API_URL}/api/hostels/${info.hostel._id}/stats`);
         if (statsRes.ok) setStatsData(await statsRes.json());
       } catch (e) {
         console.error("Failed to load admin stats");

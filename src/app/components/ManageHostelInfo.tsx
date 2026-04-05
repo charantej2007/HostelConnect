@@ -1,3 +1,4 @@
+import { API_URL } from "../config/api.config";
 import { ArrowLeft, Plus, Building2, Pencil, Trash2, Phone, MessageCircle, User } from "lucide-react";
 import { Card, CardContent } from "./ui/card";
 import { Button } from "./ui/button";
@@ -36,7 +37,7 @@ export function ManageHostelInfo({ onBack }: ManageHostelInfoProps) {
             setIsLoading(false);
             return;
         }
-        const response = await fetch(`http://localhost:5000/api/hostels/admin/${uid}/blocks`);
+        const response = await fetch(`${API_URL}/api/hostels/admin/${uid}/blocks`);
         const data = await response.json();
         if (response.ok) {
           setBlocks(data.blocks || []);
@@ -90,7 +91,7 @@ export function ManageHostelInfo({ onBack }: ManageHostelInfoProps) {
     try {
       const uid = auth.currentUser?.uid;
       if (!uid) return false;
-      const response = await fetch(`http://localhost:5000/api/hostels/admin/${uid}/blocks`, {
+      const response = await fetch(`${API_URL}/api/hostels/admin/${uid}/blocks`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ blocks: updatedBlocks }),

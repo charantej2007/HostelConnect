@@ -1,3 +1,4 @@
+import { API_URL } from "../config/api.config";
 import { useState } from "react";
 import { KeyRound, Shield, AlertCircle } from "lucide-react";
 import { Card, CardContent } from "./ui/card";
@@ -27,7 +28,7 @@ export function CodeVerification({ role, onVerified, onBack }: CodeVerificationP
     setIsVerifying(true);
 
     try {
-      const response = await fetch("http://localhost:5000/api/auth/verify-code", {
+      const response = await fetch(`${API_URL}/api/auth/verify-code`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ code: code.trim().toUpperCase(), role })

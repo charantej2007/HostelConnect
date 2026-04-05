@@ -1,3 +1,4 @@
+import { API_URL } from "../config/api.config";
 import { useState, useEffect } from "react";
 import { ArrowLeft, Home, Users, Bed, DoorOpen, Wifi, Fan, Lightbulb, Bell, CheckCircle } from "lucide-react";
 import { Card, CardContent } from "./ui/card";
@@ -27,7 +28,7 @@ export function RoomDetails({ onBack, onNavigateToComplaints }: RoomDetailsProps
         }
         
         const idToken = await user.getIdToken();
-        const syncRes = await fetch("http://localhost:5000/api/auth/sync", {
+        const syncRes = await fetch(`${API_URL}/api/auth/sync`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ idToken })
@@ -36,7 +37,7 @@ export function RoomDetails({ onBack, onNavigateToComplaints }: RoomDetailsProps
         const syncData = await syncRes.json();
         
         if (syncData.user?.room_id) {
-            const roomRes = await fetch(`http://localhost:5000/api/rooms/detail/${syncData.user.room_id}`);
+            const roomRes = await fetch(`${API_URL}/api/rooms/detail/${syncData.user.room_id}`);
             const roomData = await roomRes.json();
             setRoomInfo(roomData);
         }

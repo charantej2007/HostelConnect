@@ -1,3 +1,4 @@
+import { API_URL } from "../config/api.config";
 import { useState, useEffect } from "react";
 import { ArrowLeft, Filter } from "lucide-react";
 import { ComplaintCard, Complaint } from "./ComplaintCard";
@@ -19,11 +20,11 @@ export function TrackComplaints({ onBack, onComplaintClick }: TrackComplaintsPro
         try {
             const uid = auth.currentUser?.uid;
             if(!uid) return;
-            const roomRes = await fetch(`http://localhost:5000/api/rooms/student/${uid}`);
+            const roomRes = await fetch(`${API_URL}/api/rooms/student/${uid}`);
             if(!roomRes.ok) return;
             const data = await roomRes.json();
             
-            const cmpRes = await fetch(`http://localhost:5000/api/complaints/${data.hostel._id}?student_id=${data.user._id}`);
+            const cmpRes = await fetch(`${API_URL}/api/complaints/${data.hostel._id}?student_id=${data.user._id}`);
             if(cmpRes.ok) {
                 const cmpData = await cmpRes.json();
                 const mapped: Complaint[] = cmpData.map((c: any) => ({

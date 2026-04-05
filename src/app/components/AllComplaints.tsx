@@ -1,3 +1,4 @@
+import { API_URL } from "../config/api.config";
 import { useState, useEffect } from "react";
 import { ArrowLeft, Filter } from "lucide-react";
 import { ComplaintCard, Complaint } from "./ComplaintCard";
@@ -21,13 +22,13 @@ export function AllComplaints({ onBack, onComplaintClick, userRole }: AllComplai
         const uid = auth.currentUser?.uid;
         if (!uid) return;
 
-        const userRes = await fetch(`http://localhost:5000/api/auth/user/${uid}`);
+        const userRes = await fetch(`${API_URL}/api/auth/user/${uid}`);
         if (!userRes.ok) return;
         const data = await userRes.json();
         const hostelId = data.hostel?._id || data.user?.hostel_id;
         if (!hostelId) return;
 
-        const cmpRes = await fetch(`http://localhost:5000/api/complaints/${hostelId}`);
+        const cmpRes = await fetch(`${API_URL}/api/complaints/${hostelId}`);
         if (!cmpRes.ok) return;
 
         const cmpData = await cmpRes.json();

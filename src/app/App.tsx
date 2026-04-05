@@ -1,3 +1,4 @@
+import { API_URL } from "../config/api.config";
 import { useState, useEffect } from "react";
 import { SplashScreen } from "./components/SplashScreen";
 import { RoleSelectionLogin } from "./components/RoleSelectionLogin";
@@ -93,7 +94,7 @@ export default function App() {
       try {
         const currentUser = auth.currentUser;
         if (currentUser) {
-          await fetch("http://localhost:5000/api/auth/complete-onboarding", {
+          await fetch(`${API_URL}/api/auth/complete-onboarding`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
