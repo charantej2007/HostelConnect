@@ -1,0 +1,429 @@
+import { useState } from "react";
+import { motion } from "motion/react";
+import { User, Wrench, Shield, Building2, Mail, Lock, Eye, EyeOff } from "lucide-react";
+import { Button } from "./ui/button";
+import { Input } from "./ui/input";
+import { Label } from "./ui/label";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
+import { auth, googleProvider } from "../config/firebase.config";
+import { signInWithPopup, createUserWithEmailAndPassword, signInWithEmailAndPassword } from "firebase/auth";
+
+interface RoleSelectionLoginProps {
+  onLogin: (role: "student" | "worker" | "admin") => void;
+  onSignupComplete: (role: "student" | "worker" | "admin", isFirstTime: boolean) => void;
+}
+
+type Role = "student" | "worker" | "admin";
+
+export function RoleSelectionLogin({ onLogin, onSignupComplete }: RoleSelectionLoginProps) {
+  const [selectedRole, setSelectedRole] = useState<Role | null>(null);
+  const [isSignupMode, setIsSignupMode] = useState(false);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [firebaseUser, setFirebaseUser] = useState<any>(null);
+  const [errorMsg, setErrorMsg] = useState("");
+
+  const roles = [
+    {
+      id: "student" as Role,
+      label: "Student",
+      icon: User,
+      color: "from-[#1E88E5] to-[#1976D2]",
+      description: "Raise and track complaints",
+    },
+    {
+      id: "worker" as Role,
+      label: "Worker",
+      icon: Wrench,
+      color: "from-[#26A69A] to-[#00897B]",
+      description: "Manage assigned tasks",
+    },
+    {
+      id: "admin" as Role,
+      label: "Administrator",
+      icon: Shield,
+      color: "from-[#43A047] to-[#388E3C]",
+      description: "Oversee operations",
+    },
+  ];
+  
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMsg("");
+
+    if (!selectedRole) return;
+
+    // If firebaseUser is already set (from Google), handle directly
+    if (firebaseUser) {
+      if (isSignupMode) {
+        onSignupComplete(selectedRole, true);
+      } else {
+        onLogin(selectedRole);
+      }
+      return;
+    }
+
+    if (!email || !password) return;
+    setIsLoading(true);
+
+    try {
+      if (isSignupMode) {
+        // --- SIGNUP FLOW ---
+        if (password !== confirmPassword) {
+          setErrorMsg("Passwords do not match!");
+          setIsLoading(false);
+          return;
+        }
+
+        // 1. Create user in Firebase Auth
+        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+        const newUser = userCredential.user;
+
+        // 2. Sync the new user with the backend (this will return needsOnboarding: true)
+        const idToken = await newUser.getIdToken();
+        await fetch("http://localhost:5000/api/auth/sync", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ idToken, role: selectedRole })
+        });
+
+        setFirebaseUser(newUser);
+        // Redirect to code verification / onboarding
+        onSignupComplete(selectedRole, true);
+
+      } else {
+        // --- LOGIN FLOW ---
+        // 1. Sign in with Firebase Auth
+        const userCredential = await signInWithEmailAndPassword(auth, email, password);
+        const existingUser = userCredential.user;
+
+        // 2. Sync with backend to find existing MongoDB record
+        const idToken = await existingUser.getIdToken();
+        const response = await fetch("http://localhost:5000/api/auth/sync", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ idToken, role: selectedRole })
+        });
+
+        const data = await response.json();
+
+        if (data.user && data.user.hostel_id) {
+          // Fully onboarded user → go to dashboard
+          onLogin(data.user.role);
+        } else {
+          // User is partially onboarded but tried to log in
+          setErrorMsg("Your registration is incomplete. Please use 'Sign Up' to enter your join code.");
+          setIsLoading(false);
+          return;
+        }
+      }
+    } catch (error: any) {
+      console.error("Auth error:", error);
+      if (error.code === "auth/email-already-in-use") {
+        setErrorMsg("This email is already registered. Try logging in instead.");
+      } else if (error.code === "auth/invalid-credential" || error.code === "auth/wrong-password") {
+        setErrorMsg("Incorrect email or password.");
+      } else if (error.code === "auth/user-not-found") {
+        setErrorMsg("No account found with this email. Please sign up first.");
+      } else if (error.code === "auth/weak-password") {
+        setErrorMsg("Password must be at least 6 characters.");
+      } else {
+        setErrorMsg(error.message || "Authentication failed. Please try again.");
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleGoogleLogin = async () => {
+    setIsLoading(true);
+    try {
+      const result = await signInWithPopup(auth, googleProvider);
+      setFirebaseUser(result.user);
+      
+      // Sync with backend
+      const idToken = await result.user.getIdToken();
+      const response = await fetch("http://localhost:5000/api/auth/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ idToken, role: selectedRole })
+      });
+
+      const data = await response.json();
+      
+      if (data.user && data.user.hostel_id) {
+        // User already exists and is fully onboarded, log them in
+        onLogin(data.user.role);
+      } else if (data.user && !data.user.hostel_id) {
+        // User exists but hasn't completed onboarding
+        setIsSignupMode(true);
+        onSignupComplete(data.user.role || "student", true);
+      } else {
+        // Brand new user, stay in signup mode to get role
+        setIsSignupMode(true);
+      }
+    } catch (error: any) {
+      alert("Google Login failed: " + error.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const toggleMode = () => {
+    setIsSignupMode(!isSignupMode);
+    setEmail("");
+    setPassword("");
+    setConfirmPassword("");
+  };
+  
+  if (!selectedRole) {
+    return (
+      <div className="min-h-screen bg-[#F5F7FA] flex flex-col items-center justify-center p-6">
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="text-center mb-8"
+        >
+          <div className="w-20 h-20 bg-white rounded-2xl flex items-center justify-center mb-4 mx-auto shadow-lg overflow-hidden">
+             <img src="/logo.jpg" alt="HostelConnect Logo" className="w-full h-full object-cover" />
+          </div>
+          <h1 className="text-3xl mb-2">HostelConnect</h1>
+          <p className="text-gray-600">Select your role to continue</p>
+        </motion.div>
+        
+        <div className="w-full max-w-sm space-y-4">
+          {roles.map((role, index) => {
+            const Icon = role.icon;
+            return (
+              <motion.div
+                key={role.id}
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: index * 0.1 }}
+              >
+                <Card
+                  className="cursor-pointer hover:shadow-lg transition-shadow border-none overflow-hidden"
+                  onClick={() => setSelectedRole(role.id)}
+                >
+                  <div className={`h-1 bg-gradient-to-r ${role.color}`} />
+                  <CardContent className="p-4 flex items-center gap-4">
+                    <div className={`w-12 h-12 bg-gradient-to-br ${role.color} rounded-xl flex items-center justify-center shadow-md`}>
+                      <Icon className="w-6 h-6 text-white" />
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="font-semibold text-lg">{role.label}</h3>
+                      <p className="text-sm text-gray-600">{role.description}</p>
+                    </div>
+                  </CardContent>
+                </Card>
+              </motion.div>
+            );
+          })}
+        </div>
+
+
+      </div>
+    );
+  }
+  
+  const currentRole = roles.find((r) => r.id === selectedRole)!;
+  const Icon = currentRole.icon;
+  
+  return (
+    <div className="min-h-screen bg-[#F5F7FA] flex flex-col items-center justify-center p-6">
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        className="w-full max-w-sm"
+      >
+        <button
+          onClick={() => setSelectedRole(null)}
+          className="text-[#1E88E5] mb-4 text-sm flex items-center gap-1"
+        >
+          ← Back to role selection
+        </button>
+        
+        <Card className="border-none shadow-lg">
+          <div className={`h-2 bg-gradient-to-r ${currentRole.color}`} />
+          <CardHeader className="text-center pb-4">
+            <div className={`w-20 h-20 bg-white rounded-2xl flex items-center justify-center mb-4 mx-auto shadow-md overflow-hidden border-2`} style={{ borderColor: currentRole.color.split(' ')[1]?.replace('to-[', '').replace(']', '') }}>
+                <img src="/logo.jpg" alt="HostelConnect Logo" className="w-full h-full object-cover" />
+            </div>
+            <CardTitle className="text-2xl">
+              {currentRole.label} {isSignupMode ? "Signup" : "Login"}
+            </CardTitle>
+            <CardDescription>
+              {isSignupMode ? "Create your account to continue" : "Enter your credentials to continue"}
+            </CardDescription>
+          </CardHeader>
+          
+          <CardContent>
+            <form onSubmit={handleLogin} className="space-y-4">
+              {!firebaseUser && (
+                <>
+                  <div className="space-y-2">
+                    <Label htmlFor="email">Email</Label>
+                    <div className="relative">
+                      <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+                      <Input
+                        id="email"
+                        type="email"
+                        placeholder="Enter your email"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        className="pl-10 h-12"
+                        required
+                      />
+                    </div>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="password">Password</Label>
+                    <div className="relative">
+                      <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+                      <Input
+                        id="password"
+                        type={showPassword ? "text" : "password"}
+                        placeholder="Enter your password"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        className="pl-10 pr-10 h-12"
+                        required
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2"
+                      >
+                        {showPassword ? (
+                          <EyeOff className="h-5 w-5 text-gray-400" />
+                        ) : (
+                          <Eye className="h-5 w-5 text-gray-400" />
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {firebaseUser && (
+                <div className="p-3 bg-blue-50 rounded-lg flex items-center gap-3 mb-4">
+                  <div className="w-10 h-10 rounded-full overflow-hidden border border-blue-200">
+                    <img src={firebaseUser.photoURL || ""} alt="Avatar" className="w-full h-full object-cover" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm font-semibold text-blue-900">{firebaseUser.displayName}</p>
+                    <p className="text-xs text-blue-700">{firebaseUser.email}</p>
+                  </div>
+                  <button 
+                    type="button" 
+                    onClick={() => setFirebaseUser(null)}
+                    className="text-xs text-blue-600 hover:underline"
+                  >
+                    Change
+                  </button>
+                </div>
+              )}
+
+
+              {isSignupMode && !firebaseUser && (
+                <div className="space-y-2">
+                  <Label htmlFor="confirmPassword">Confirm Password</Label>
+                  <div className="relative">
+                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+                    <Input
+                      id="confirmPassword"
+                      type={showPassword ? "text" : "password"}
+                      placeholder="Confirm your password"
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      className="pl-10 pr-10 h-12"
+                      required
+                    />
+                  </div>
+                </div>
+              )}
+
+              {!isSignupMode && (
+                <button
+                  type="button"
+                  className="text-sm text-[#1E88E5] hover:underline"
+                >
+                  Forgot password?
+                </button>
+              )}
+              
+              {errorMsg && (
+                <div className="p-3 bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg">
+                  {errorMsg}
+                </div>
+              )}
+              
+              <Button
+                type="submit"
+                disabled={isLoading}
+                className={`w-full h-12 bg-gradient-to-r ${currentRole.color} text-white hover:opacity-90 transition-opacity`}
+              >
+                {isLoading ? "Please wait..." : isSignupMode ? (firebaseUser ? "Complete Signup" : "Sign Up") : (firebaseUser ? "Continue to Dashboard" : "Login")}
+              </Button>
+
+              <div className="text-center">
+                <button
+                  type="button"
+                  onClick={toggleMode}
+                  className="text-sm text-[#1E88E5] hover:underline"
+                >
+                  {isSignupMode ? "Already have an account? Login" : "Don't have an account? Sign Up"}
+                </button>
+              </div>
+
+              {!firebaseUser && (
+                <>
+                  <div className="relative my-4">
+                    <div className="absolute inset-0 flex items-center">
+                      <span className="w-full border-t border-gray-300" />
+                    </div>
+                    <div className="relative flex justify-center text-xs uppercase">
+                      <span className="bg-white px-2 text-gray-500">Or continue with</span>
+                    </div>
+                  </div>
+
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleGoogleLogin}
+                    disabled={isLoading}
+                    className="w-full h-12 flex items-center justify-center gap-2 border-gray-200 bg-white hover:bg-gray-50 transition-all rounded-lg text-gray-700 font-medium shadow-sm"
+                  >
+                    <svg className="h-5 w-5" viewBox="0 0 24 24">
+                      <path
+                        d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                        fill="#4285F4"
+                      />
+                      <path
+                        d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                        fill="#34A853"
+                      />
+                      <path
+                        d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"
+                        fill="#FBBC05"
+                      />
+                      <path
+                        d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
+                        fill="#EA4335"
+                      />
+                    </svg>
+                    Continue with Google
+                  </Button>
+                </>
+              )}
+            </form>
+          </CardContent>
+        </Card>
+      </motion.div>
+    </div>
+  );
+}
