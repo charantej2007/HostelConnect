@@ -1,4 +1,4 @@
-import { API_URL } from "../config/api.config";
+import { API_URL } from "./config/api.config";
 import { useState, useEffect } from "react";
 import { SplashScreen } from "./components/SplashScreen";
 import { RoleSelectionLogin } from "./components/RoleSelectionLogin";
