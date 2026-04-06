@@ -46,7 +46,8 @@ type Screen =
   | "notices"
   | "profile"
   | "student-onboarding"
-  | "complaints-list";
+  | "complaints-list"
+  | "tasks";
 
 type Role = "student" | "worker" | "admin";
 
@@ -225,6 +226,17 @@ export default function App() {
             onNavigate={handleNavigate}
             onLogout={handleBackToLogin}
             onNotifications={() => setCurrentScreen("notifications")}
+            defaultTab="queue"
+          />
+        )}
+
+        {currentScreen === "tasks" && userRole === "worker" && (
+          <WorkerDashboard
+            onComplaintClick={handleComplaintClick}
+            onNavigate={handleNavigate}
+            onLogout={handleBackToLogin}
+            onNotifications={() => setCurrentScreen("notifications")}
+            defaultTab="active"
           />
         )}
 

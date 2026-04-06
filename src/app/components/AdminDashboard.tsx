@@ -7,6 +7,7 @@ import { Button } from "./ui/button";
 import { auth } from "../config/firebase.config";
 import { signOut } from "firebase/auth";
 import { useState, useEffect } from "react";
+import { AnnouncementModal } from "./AnnouncementModal";
 
 interface AdminDashboardProps {
   onNavigate: (screen: string) => void;
@@ -18,6 +19,8 @@ interface AdminDashboardProps {
 export function AdminDashboard({ onNavigate, onComplaintClick, onLogout, onNotifications }: AdminDashboardProps) {
   const [statsData, setStatsData] = useState<any>(null);
   const [complaints, setComplaints] = useState<Complaint[]>([]);
+  const [isAnnouncementOpen, setIsAnnouncementOpen] = useState(false);
+  const [hostelId, setHostelId] = useState("");
 
   useEffect(() => {
     const fetchAdminData = async () => {
@@ -28,6 +31,7 @@ export function AdminDashboard({ onNavigate, onComplaintClick, onLogout, onNotif
         const infoRes = await fetch(`${API_URL}/api/hostels/admin-info/${uid}`);
         if (!infoRes.ok) return;
         const info = await infoRes.json();
+        setHostelId(info.hostel._id);
         
         const statsRes = await fetch(`${API_URL}/api/hostels/${info.hostel._id}/stats`);
         if (statsRes.ok) setStatsData(await statsRes.json());
@@ -110,6 +114,19 @@ export function AdminDashboard({ onNavigate, onComplaintClick, onLogout, onNotif
             <Building2 className="w-5 h-5 mr-2" />
             Manage Hostel Info
           </Button>
+          <Button
+            onClick={() => setIsAnnouncementOpen(true)}
+            className="w-full h-12 mt-3 bg-gradient-to-r from-[#26A69A] to-[#1E88E5] text-white"
+          >
+            <Bell className="w-5 h-5 mr-2" />
+            Announcement
+          </Button>
+          
+          <AnnouncementModal 
+            isOpen={isAnnouncementOpen} 
+            onClose={() => setIsAnnouncementOpen(false)}
+            hostelId={hostelId}
+          />
         </div>
 
 

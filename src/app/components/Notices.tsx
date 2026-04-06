@@ -1,52 +1,61 @@
-import { ArrowLeft, Bell, Calendar, Pin } from "lucide-react";
+import { ArrowLeft, Bell, Calendar, Pin, Download, ExternalLink } from "lucide-react";
 import { Card, CardContent } from "./ui/card";
 import { Badge } from "./ui/badge";
+import { useState, useEffect } from "react";
+import { API_URL } from "../config/api.config";
+import { auth } from "../config/firebase.config";
 
 interface NoticesProps {
   onBack: () => void;
 }
 
-const mockNotices = [
-  {
-    id: "N001",
-    title: "Hostel Maintenance Notice",
-    description: "The hostel will undergo routine maintenance on Sunday, March 9th. Water supply will be affected from 9 AM to 2 PM.",
-    date: "March 5, 2026",
-    priority: "high",
-    pinned: true,
-  },
-  {
-    id: "N002",
-    title: "New Mess Menu",
-    description: "Updated mess menu for the month of March is now available. Special dishes on weekends!",
-    date: "March 3, 2026",
-    priority: "medium",
-    pinned: false,
-  },
-  {
-    id: "N003",
-    title: "Electricity Conservation Week",
-    description: "As part of our green initiative, please switch off lights and fans when not in use. Let's save energy together!",
-    date: "March 1, 2026",
-    priority: "low",
-    pinned: false,
-  },
-  {
-    id: "N004",
-    title: "Payment Reminder",
-    description: "Monthly hostel fees payment is due by March 10th. Please clear your dues to avoid late fees.",
-    date: "February 28, 2026",
-    priority: "high",
-    pinned: true,
-  },
-];
+interface Announcement {
+  _id: string;
+  title: string;
+  description: string;
+  priority: string;
+  pinned: boolean;
+  date: string;
+  attachments?: string[];
+}
 
 export function Notices({ onBack }: NoticesProps) {
+  const [notices, setNotices] = useState<Announcement[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
   const priorityColors = {
     high: "bg-[#E53935] text-white",
     medium: "bg-[#FB8C00] text-white",
     low: "bg-[#26A69A] text-white",
   };
+
+  useEffect(() => {
+    const fetchNotices = async () => {
+      try {
+        const uid = auth.currentUser?.uid;
+        if (!uid) return;
+
+        // 1. Get user/hostel info
+        const userRes = await fetch(`${API_URL}/api/auth/user/${uid}`);
+        if (!userRes.ok) return;
+        const userData = await userRes.json();
+        const hostelId = userData.hostel._id;
+
+        // 2. Fetch announcements
+        const res = await fetch(`${API_URL}/api/announcements/hostel/${hostelId}`);
+        if (res.ok) {
+          const data = await res.json();
+          setNotices(data);
+        }
+      } catch (error) {
+        console.error("Failed to fetch notices:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchNotices();
+  }, []);
 
   return (
     <div className="min-h-screen bg-[#F5F7FA] pb-20">
@@ -63,33 +72,63 @@ export function Notices({ onBack }: NoticesProps) {
 
       {/* Notices List */}
       <div className="p-6 space-y-4">
-        {mockNotices.map((notice) => (
-          <Card key={notice.id} className="border-none shadow-md overflow-hidden">
-            {notice.pinned && (
-              <div className="h-1 bg-gradient-to-r from-[#1E88E5] to-[#26A69A]" />
-            )}
-            <CardContent className="p-4">
-              <div className="flex items-start justify-between mb-2">
-                <div className="flex items-center gap-2 flex-1">
-                  {notice.pinned && (
-                    <Pin className="w-4 h-4 text-[#1E88E5] flex-shrink-0" />
-                  )}
-                  <h3 className="font-semibold">{notice.title}</h3>
+        {isLoading ? (
+          <div className="text-center py-10 text-gray-500">Loading notices...</div>
+        ) : notices.length > 0 ? (
+          notices.map((notice) => (
+            <Card key={notice._id} className="border-none shadow-md overflow-hidden">
+              {notice.pinned && (
+                <div className="h-1 bg-gradient-to-r from-[#1E88E5] to-[#26A69A]" />
+              )}
+              <CardContent className="p-4">
+                <div className="flex items-start justify-between mb-2">
+                  <div className="flex items-center gap-2 flex-1">
+                    {notice.pinned && (
+                      <Pin className="w-4 h-4 text-[#1E88E5] flex-shrink-0" />
+                    )}
+                    <h3 className="font-semibold">{notice.title}</h3>
+                  </div>
+                  <Badge className={`${priorityColors[notice.priority as keyof typeof priorityColors]} text-xs`}>
+                    {notice.priority.toUpperCase()}
+                  </Badge>
                 </div>
-                <Badge className={`${priorityColors[notice.priority as keyof typeof priorityColors]} text-xs`}>
-                  {notice.priority.toUpperCase()}
-                </Badge>
-              </div>
-              
-              <p className="text-sm text-gray-600 mb-3">{notice.description}</p>
-              
-              <div className="flex items-center gap-2 text-xs text-gray-500">
-                <Calendar className="w-4 h-4" />
-                <span>{notice.date}</span>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+                
+                <p className="text-sm text-gray-600 mb-3 whitespace-pre-wrap">{notice.description}</p>
+                
+                {notice.attachments && notice.attachments.length > 0 && (
+                  <div className="flex flex-wrap gap-2 mb-3">
+                    {notice.attachments.map((url, i) => (
+                      <a 
+                        key={i} 
+                        href={url} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-1.5 bg-gray-50 hover:bg-gray-100 border rounded-full px-3 py-1 text-xs text-blue-600 font-medium transition-colors"
+                      >
+                        <ExternalLink className="w-3 h-3" />
+                        Document {i + 1}
+                      </a>
+                    ))}
+                  </div>
+                )}
+                
+                <div className="flex items-center gap-2 text-xs text-gray-500">
+                  <Calendar className="w-4 h-4" />
+                  <span>{new Date(notice.date).toLocaleDateString("en-US", { 
+                    month: "long", 
+                    day: "numeric", 
+                    year: "numeric" 
+                  })}</span>
+                </div>
+              </CardContent>
+            </Card>
+          ))
+        ) : (
+          <div className="text-center py-10">
+            <Bell className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+            <p className="text-gray-500">No notices at the moment</p>
+          </div>
+        )}
       </div>
     </div>
   );
