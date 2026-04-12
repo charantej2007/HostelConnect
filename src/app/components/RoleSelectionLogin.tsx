@@ -7,7 +7,7 @@ import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
 import { auth, googleProvider } from "../config/firebase.config";
-import { signInWithPopup, createUserWithEmailAndPassword, signInWithEmailAndPassword, updatePassword } from "firebase/auth";
+import { signInWithPopup, createUserWithEmailAndPassword, signInWithEmailAndPassword, updatePassword, sendPasswordResetEmail } from "firebase/auth";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "./ui/input-otp";
 import { toast } from "sonner";
 
@@ -153,6 +153,25 @@ export function RoleSelectionLogin({ onLogin, onSignupComplete }: RoleSelectionL
       toast.success("Password reset OTP sent to your email!");
     } catch (error: any) {
       setErrorMsg(error.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleFirebaseResetLink = async () => {
+    if (!email) {
+      setErrorMsg("Please enter your email address first.");
+      return;
+    }
+    setErrorMsg("");
+    setIsLoading(true);
+    try {
+      await sendPasswordResetEmail(auth, email);
+      toast.success("Password reset link sent to your email via Firebase!");
+      setErrorMsg(""); // Clear errors if it worked
+    } catch (error: any) {
+      console.error("Firebase Reset Error:", error);
+      setErrorMsg("Firebase reset failed: " + (error.code || error.message));
     } finally {
       setIsLoading(false);
     }
@@ -452,8 +471,18 @@ export function RoleSelectionLogin({ onLogin, onSignupComplete }: RoleSelectionL
               )}
               
               {errorMsg && (
-                <div className="p-3 bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg">
-                  {errorMsg}
+                <div className="p-3 bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg space-y-2">
+                  <p>{errorMsg}</p>
+                  {errorMsg.includes("Mail failure") && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={handleFirebaseResetLink}
+                      className="w-full text-xs h-8 border-red-200 hover:bg-red-100 transition-colors"
+                    >
+                      Try sending a Reset Link instead
+                    </Button>
+                  )}
                 </div>
               )}
               

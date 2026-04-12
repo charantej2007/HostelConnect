@@ -11,9 +11,11 @@ class MailService {
         user: process.env.MAIL_USER,
         pass: process.env.MAIL_PASS
       },
-      connectionTimeout: 10000, // 10 seconds
+      connectionTimeout: 10000, 
       greetingTimeout: 10000,
-      socketTimeout: 15000
+      socketTimeout: 15000,
+      debug: true, // Enable debug logs
+      logger: true // Log to console
     });
 
     // Verify connection on startup
@@ -53,8 +55,13 @@ class MailService {
       });
       return true;
     } catch (error) {
-      console.error('Mail sending error:', error);
-      throw new Error('Failed to send email. Please check your SMTP configuration.');
+      console.error('Mail sending error DETAILS:', {
+        code: error.code,
+        command: error.command,
+        response: error.response,
+        message: error.message
+      });
+      throw new Error(`Mail failure (${error.code || 'UNKNOWN'}): Please ensure SMTP ports are open on your host.`);
     }
   }
 }
