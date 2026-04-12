@@ -6,10 +6,22 @@ class MailService {
       service: process.env.MAIL_SERVICE,
       host: process.env.MAIL_HOST,
       port: process.env.MAIL_PORT,
-      secure: process.env.MAIL_PORT == 465, // true for 465, false for other ports
+      secure: process.env.MAIL_PORT == 465,
       auth: {
         user: process.env.MAIL_USER,
         pass: process.env.MAIL_PASS
+      },
+      connectionTimeout: 10000, // 10 seconds
+      greetingTimeout: 10000,
+      socketTimeout: 15000
+    });
+
+    // Verify connection on startup
+    this.transporter.verify((error, success) => {
+      if (error) {
+        console.error('SMTP Connection Error:', error);
+      } else {
+        console.log('SMTP Server is ready to take messages');
       }
     });
   }
