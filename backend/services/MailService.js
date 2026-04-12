@@ -1,34 +1,22 @@
-const nodemailer = require('nodemailer');
+const path = require('path');
 
 class MailService {
   constructor() {
-    this.transporter = nodemailer.createTransport({
-      service: process.env.MAIL_SERVICE,
-      host: process.env.MAIL_HOST,
-      port: process.env.MAIL_PORT,
-      secure: process.env.MAIL_PORT == 465,
-      auth: {
-        user: process.env.MAIL_USER,
-        pass: process.env.MAIL_PASS
-      },
-      connectionTimeout: 10000, 
-      greetingTimeout: 10000,
-      socketTimeout: 15000,
-      debug: true, // Enable debug logs
-      logger: true // Log to console
-    });
-
-    // Verify connection on startup
-    this.transporter.verify((error, success) => {
-      if (error) {
-        console.error('SMTP Connection Error:', error);
-      } else {
-        console.log('SMTP Server is ready to take messages');
-      }
-    });
+    this.apiKey = process.env.RESEND_API_KEY;
+    this.fromEmail = 'onboarding@resend.dev'; // Resend's default for unverified domains
+    
+    if (!this.apiKey) {
+      console.warn('WARNING: RESEND_API_KEY is missing. Emails will fail to send.');
+    } else {
+      console.log('MailService initialized with Resend Web API');
+    }
   }
 
   async sendOTP(email, otp, purpose) {
+    if (!this.apiKey) {
+      throw new Error('Mail Service is not configured (RESEND_API_KEY missing)');
+    }
+
     const subject = purpose === 'signup' ? 'HostelConnect - Signup OTP' : 'HostelConnect - Forgot Password OTP';
     const text = `Your OTP for ${purpose === 'signup' ? 'Signup' : 'Resetting Password'} is: ${otp}. This OTP is valid for 5 minutes.`;
     const html = `
@@ -46,22 +34,33 @@ class MailService {
     `;
 
     try {
-      await this.transporter.sendMail({
-        from: `"HostelConnect" <${process.env.MAIL_USER}>`,
-        to: email,
-        subject,
-        text,
-        html
+      const response = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${this.apiKey}`
+        },
+        body: JSON.stringify({
+          from: `HostelConnect <${this.fromEmail}>`,
+          to: [email],
+          subject: subject,
+          text: text,
+          html: html
+        })
       });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        console.error('Resend API Error:', data);
+        throw new Error(`Mail API Failure: ${data.message || response.statusText}`);
+      }
+
+      console.log('Email sent successfully via Resend:', data.id);
       return true;
     } catch (error) {
-      console.error('Mail sending error DETAILS:', {
-        code: error.code,
-        command: error.command,
-        response: error.response,
-        message: error.message
-      });
-      throw new Error(`Mail failure (${error.code || 'UNKNOWN'}): Please ensure SMTP ports are open on your host.`);
+      console.error('Mail Service Error DETAILS:', error);
+      throw new Error(`Failed to send email via API: ${error.message}`);
     }
   }
 }
