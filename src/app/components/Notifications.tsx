@@ -62,9 +62,18 @@ function timeAgo(dateStr: string) {
 }
 
 export function Notifications({ onBack, userRole }: NotificationsProps) {
+  const LOCAL_STORAGE_KEY = `hostelconnect_read_notifications_${auth.currentUser?.uid || 'guest'}`;
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [readIds, setReadIds] = useState<Set<string>>(new Set());
+  const [readIds, setReadIds] = useState<Set<string>>(() => {
+    const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
+    return saved ? new Set(JSON.parse(saved)) : new Set();
+  });
+
+  // Save readIds whenever they change
+  useEffect(() => {
+    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(Array.from(readIds)));
+  }, [readIds, LOCAL_STORAGE_KEY]);
 
   useEffect(() => {
     const fetchNotifications = async () => {
@@ -133,19 +142,22 @@ export function Notifications({ onBack, userRole }: NotificationsProps) {
             });
           }
 
-          if (c.status === "Completed") {
+          if (c.status === "Resolved") {
             notifs.push({
-              id: `${c._id}-inprogress`,
-              title: `Work Started — ${cType}`,
-              message: `Complaint #${shortId} was picked up by ${c.worker_id?.name || "a worker"}.`,
+              id: `${c._id}-resolved`,
+              title: `✨ Resolved — ${cType}`,
+              message: `Complaint #${shortId} has been addressed by ${c.worker_id?.name || "a worker"}. Please verify the work to complete it.`,
               time: timeAgo(c.created_time),
-              type: "in-progress",
+              type: "raised", // Changed to raised for better visual contrast
               read: false,
             });
+          }
+
+          if (c.status === "Completed") {
             notifs.push({
               id: `${c._id}-completed`,
-              title: `✅ Resolved — ${cType}`,
-              message: `Complaint #${shortId} has been marked as Completed.`,
+              title: `✅ Verified — ${cType}`,
+              message: `Complaint #${shortId} has been verified and officially closed.`,
               time: c.completed_time ? timeAgo(c.completed_time) : timeAgo(c.created_time),
               type: "completed",
               read: false,
@@ -167,7 +179,15 @@ export function Notifications({ onBack, userRole }: NotificationsProps) {
         });
 
         // Most recent first
-        setNotifications(notifs.reverse());
+        const sorted = notifs.reverse();
+        setNotifications(sorted);
+
+        // Auto-mark all as read when opened, as requested
+        setReadIds(prev => {
+          const newSet = new Set(prev);
+          sorted.forEach(n => newSet.add(n.id));
+          return newSet;
+        });
       } catch (e) {
         console.error("Notifications fetch error", e);
       } finally {

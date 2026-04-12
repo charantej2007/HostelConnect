@@ -256,10 +256,11 @@ export default function App() {
           />
         )}
 
-        {currentScreen === "track-complaints" && (
+        {currentScreen === "track-complaints" && userRole && (
           <TrackComplaints
             onBack={handleBackToDashboard}
             onComplaintClick={handleComplaintClick}
+            userRole={userRole}
           />
         )}
 

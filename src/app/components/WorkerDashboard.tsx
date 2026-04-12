@@ -20,6 +20,7 @@ export function WorkerDashboard({ onComplaintClick, onNavigate, onLogout, onNoti
   const [userData, setUserData] = useState<any>(null);
   const [hostelData, setHostelData] = useState<any>(null);
   const [complaints, setComplaints] = useState<Complaint[]>([]);
+  const [hasUnread, setHasUnread] = useState(false);
 
   useEffect(() => {
     const fetchWorkerData = async () => {
@@ -33,8 +34,14 @@ export function WorkerDashboard({ onComplaintClick, onNavigate, onLogout, onNoti
         setUserData(data.user);
         setHostelData(data.hostel);
         
+        const hostelId = data.hostel?._id || data.user?.hostel_id || data.hostel;
+        if (!hostelId) {
+            console.error("WorkerDashboard: No hostel ID found for worker:", data.user);
+            return;
+        }
+
         // Fetch queue
-        const cmpRes = await fetch(`${API_URL}/api/complaints/${data.hostel._id}`);
+        const cmpRes = await fetch(`${API_URL}/api/complaints/${hostelId}`);
         if (cmpRes.ok) {
            const cmpData = await cmpRes.json();
            const workerMongoId = String(data.user._id);
@@ -42,15 +49,17 @@ export function WorkerDashboard({ onComplaintClick, onNavigate, onLogout, onNoti
            // Filter for pending (Queue) OR assigned to THIS worker specifically
            const filtered = cmpData.filter((c: any) => {
                const status = c.status?.toLowerCase();
-               if (status === "pending") return true; // Queue
+               if (status === "pending") return true; 
                
-               // If assigned, compare IDs
                if (c.worker_id) {
                    const assignedId = typeof c.worker_id === "string" ? c.worker_id : String(c.worker_id?._id);
-                   return assignedId === workerMongoId;
+                   const isMatch = assignedId === workerMongoId;
+                   console.log(`Worker compare: ${assignedId} vs ${workerMongoId} => ${isMatch}`);
+                   return isMatch;
                }
                return false;
            });
+           console.log(`Worker filter result: ${filtered.length} of ${cmpData.length}`);
            
            const mapped: Complaint[] = filtered.map((c: any) => {
                 const slaRemaining = Math.max(0, new Date(c.sla_deadline).getTime() - Date.now()) / (1000 * 60);
@@ -61,16 +70,36 @@ export function WorkerDashboard({ onComplaintClick, onNavigate, onLogout, onNoti
                     _id: c._id,
                     type: c.complaint_type,
                     description: c.description,
-                    status: isOverdue ? "overdue" : (c.status === "Pending" ? "pending" : (c.status === "In Progress" ? "in-progress" : "completed")),
+                    status: c.status === "Pending" ? "pending" : (c.status === "In Progress" ? "in-progress" : (c.status === "Resolved" ? "resolved" : "completed")),
+                    isOverdue,
                     assignedWorker: c.worker_id?.name || undefined,
                     studentName: c.student_id?.name || "Unknown Student",
                     roomNumber: c.student_id?.room_id?.room_number || undefined,
                     slaRemaining,
                     slaTotal: 24 * 60,
-                    lastUpdate: new Date(c.created_time).toLocaleDateString()
+                    lastUpdate: new Date(c.created_time).toLocaleDateString(),
+                    attachments: c.attachments,
+                    proof_attachments: c.proof_attachments
                 };
            });
            setComplaints(mapped);
+
+           // Check for unread
+           const uid = auth.currentUser?.uid;
+           const savedRead = localStorage.getItem(`hostelconnect_read_notifications_${uid}`);
+           const readSet = new Set(savedRead ? JSON.parse(savedRead) : []);
+           
+           const hasNew = cmpData.some((c: any) => {
+              const ids = [`${c._id}-raised`];
+              if (c.status === "In Progress") ids.push(`${c._id}-inprogress`);
+              if (c.status === "Resolved") ids.push(`${c._id}-resolved`);
+              if (c.status === "Completed") ids.push(`${c._id}-completed`);
+              const slaDeadline = new Date(c.sla_deadline);
+              if (c.status === "Pending" && Date.now() > slaDeadline.getTime()) ids.push(`${c._id}-overdue`);
+              
+              return ids.some(id => !readSet.has(id));
+           });
+           setHasUnread(hasNew);
         }
       } catch (e) {
         console.error("Failed to load worker board");
@@ -85,12 +114,12 @@ export function WorkerDashboard({ onComplaintClick, onNavigate, onLogout, onNoti
   };
 
   const queueTasks = complaints.filter(c => c.status === "pending");
-  const activeTasks = complaints.filter(c => c.status === "in-progress" || c.status === "overdue");
+  const activeTasks = complaints.filter(c => c.status === "in-progress" || c.status === "resolved" || c.status === "overdue");
   const historyTasks = complaints.filter(c => c.status === "completed");
   
   const pendingStats = queueTasks.length;
-  const activeStats = activeTasks.filter(c => c.status === "in-progress").length;
-  const overdueStats = activeTasks.filter(c => c.status === "overdue").length;
+  const activeStats = activeTasks.length;
+  const overdueStats = complaints.filter(c => c.isOverdue && c.status !== "completed").length;
   
   return (
     <div className="min-h-screen bg-[#F5F7FA] pb-20">
@@ -103,8 +132,11 @@ export function WorkerDashboard({ onComplaintClick, onNavigate, onLogout, onNoti
             <p className="text-sm opacity-90 mt-1">{hostelData?.institution_name}</p>
           </div>
           <div className="flex items-center gap-2">
-            <button onClick={onNotifications} className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center hover:bg-white/30 transition-colors">
+            <button onClick={onNotifications} className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center hover:bg-white/30 transition-colors relative">
               <Bell className="w-5 h-5" />
+              {hasUnread && (
+                <span className="absolute top-2.5 right-2.5 w-2 h-2 bg-red-500 rounded-full border border-white" />
+              )}
             </button>
             <button onClick={handleLogout} className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center hover:bg-white/30 transition-colors">
               <LogOut className="w-5 h-5" />

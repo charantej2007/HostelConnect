@@ -9,6 +9,39 @@ import { Card } from "./ui/card";
 import { auth } from "../config/firebase.config";
 import { toast } from "sonner";
 
+/**
+ * Utility to compress Base64 images for storage optimization
+ */
+const compressImage = (base64Str: string, maxWidth = 800, maxHeight = 600): Promise<string> => {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.src = base64Str;
+    img.onload = () => {
+      const canvas = document.createElement("canvas");
+      let width = img.width;
+      let height = img.height;
+
+      if (width > height) {
+        if (width > maxWidth) {
+          height *= maxWidth / width;
+          width = maxWidth;
+        }
+      } else {
+        if (height > maxHeight) {
+          width *= maxHeight / height;
+          height = maxHeight;
+        }
+      }
+
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext("2d");
+      ctx?.drawImage(img, 0, 0, width, height);
+      resolve(canvas.toDataURL("image/jpeg", 0.7)); // 70% quality JPEG
+    };
+  });
+};
+
 interface RaiseComplaintProps {
   onBack: () => void;
   onSubmit: () => void;
@@ -22,7 +55,14 @@ export function RaiseComplaint({ onBack, onSubmit }: RaiseComplaintProps) {
   const complaintTypes = [
     "Electrical",
     "Water",
-    "Cleaning",
+    "Plumbing",
+    "Wifi",
+    "Laundry Service",
+    "Mess",
+    "AC Complaints",
+    "Housekeeping",
+    "Facility Management",
+    "Caretaker / assistant warden",
     "Furniture",
     "Other",
   ];
@@ -30,9 +70,14 @@ export function RaiseComplaint({ onBack, onSubmit }: RaiseComplaintProps) {
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      if (file.size > 5 * 1024 * 1024) {
+          toast.error("Image too large. Please select a photo under 5MB.");
+          return;
+      }
       const reader = new FileReader();
-      reader.onloadend = () => {
-        setImagePreview(reader.result as string);
+      reader.onloadend = async () => {
+        const compressed = await compressImage(reader.result as string);
+        setImagePreview(compressed);
       };
       reader.readAsDataURL(file);
     }
@@ -44,18 +89,28 @@ export function RaiseComplaint({ onBack, onSubmit }: RaiseComplaintProps) {
         const uid = auth.currentUser?.uid;
         if (!uid) return;
         
-        const roomRes = await fetch(`${API_URL}/api/rooms/student/${uid}`);
-        if (!roomRes.ok) throw new Error("Failed to authenticate student");
-        const data = await roomRes.json();
-        
+        // Use user endpoint to get ID and hostel safely
+        const userRes = await fetch(`${API_URL}/api/auth/user/${uid}`);
+        if (!userRes.ok) throw new Error("Failed to authenticate user");
+        const userData = await userRes.json();
+
+        let studentId = userData.user?._id;
+        let hostelId = userData.hostel?._id || userData.user?.hostel_id || userData.hostel;
+
+        if (!studentId || !hostelId) {
+            toast.error("User configuration missing. Please log in again.");
+            return;
+        }
+
         const res = await fetch(`${API_URL}/api/complaints`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                student_id: data.user._id,
-                hostel_id: data.hostel._id,
+                student_id: studentId,
+                hostel_id: hostelId,
                 type: complaintType.toUpperCase(),
-                description: description
+                description: description,
+                attachments: imagePreview ? [imagePreview] : []
             })
         });
         

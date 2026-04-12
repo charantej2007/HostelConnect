@@ -9,9 +9,10 @@ import { auth } from "../config/firebase.config";
 interface TrackComplaintsProps {
   onBack: () => void;
   onComplaintClick: (complaint: Complaint) => void;
+  userRole?: "student" | "worker" | "admin";
 }
 
-export function TrackComplaints({ onBack, onComplaintClick }: TrackComplaintsProps) {
+export function TrackComplaints({ onBack, onComplaintClick, userRole = "student" }: TrackComplaintsProps) {
   const [filter, setFilter] = useState<"all" | "pending" | "in-progress" | "completed">("all");
   const [complaints, setComplaints] = useState<Complaint[]>([]);
   
@@ -20,27 +21,55 @@ export function TrackComplaints({ onBack, onComplaintClick }: TrackComplaintsPro
         try {
             const uid = auth.currentUser?.uid;
             if(!uid) return;
-            const roomRes = await fetch(`${API_URL}/api/rooms/student/${uid}`);
-            if(!roomRes.ok) return;
-            const data = await roomRes.json();
-            
-            const cmpRes = await fetch(`${API_URL}/api/complaints/${data.hostel._id}?student_id=${data.user._id}`);
-            if(cmpRes.ok) {
+
+            let hId = "";
+            let uId = "";
+            let roomNumber = "Unknown";
+
+            if (userRole === "student") {
+                const roomRes = await fetch(`${API_URL}/api/rooms/student/${uid}`);
+                if (roomRes.ok) {
+                    const data = await roomRes.json();
+                    hId = data.hostel._id;
+                    uId = data.user._id;
+                    roomNumber = data.room.room_number;
+                }
+            } else {
+                const userRes = await fetch(`${API_URL}/api/auth/user/${uid}`);
+                if (userRes.ok) {
+                    const data = await userRes.json();
+                    hId = data.hostel?._id || data.user?.hostel_id || data.hostel;
+                    uId = data.user?._id;
+                }
+            }
+
+            if (!hId) return;
+
+            const cmpRes = await fetch(`${API_URL}/api/complaints/${hId}${uId ? `?student_id=${uId}` : ""}`);
+            console.log(`TrackComplaints: Fetching complaints for hostel ${hId}, student ${uId}`);
+            if (cmpRes.ok) {
                 const cmpData = await cmpRes.json();
-                const mapped: Complaint[] = cmpData.map((c: any) => ({
-                    id: c._id.substring(c._id.length - 6),
-                    type: c.complaint_type,
-                    description: c.description,
-                    status: c.status === "Pending" ? "pending" : (c.status === "In Progress" ? "in-progress" : "completed"),
-                    assignedWorker: c.worker_id?.name,
-                    roomNumber: data.room.room_number,
-                    slaRemaining: Math.max(0, new Date(c.sla_deadline).getTime() - Date.now()) / (1000 * 60),
-                    slaTotal: 24 * 60, // Default 24h
-                    lastUpdate: new Date(c.created_time).toLocaleDateString()
-                }));
+                const mapped: Complaint[] = cmpData.map((c: any) => {
+                    const slaRemaining = Math.max(0, new Date(c.sla_deadline).getTime() - Date.now()) / (1000 * 60);
+                    const isOverdue = slaRemaining <= 0 && c.status !== "Completed";
+
+                    return {
+                        id: c._id.substring(c._id.length - 6),
+                        _id: c._id,
+                        type: c.complaint_type,
+                        description: c.description,
+                        status: c.status === "Pending" ? "pending" : (c.status === "In Progress" ? "in-progress" : (c.status === "Resolved" ? "resolved" : "completed")),
+                        isOverdue,
+                        assignedWorker: c.worker_id?.name,
+                        roomNumber: roomNumber,
+                        slaRemaining,
+                        slaTotal: 24 * 60, // Default 24h
+                        lastUpdate: new Date(c.created_time).toLocaleDateString()
+                    };
+                });
                 setComplaints(mapped);
             }
-        } catch(e) {
+        } catch (e) {
             console.error(e);
         }
     };
@@ -49,12 +78,14 @@ export function TrackComplaints({ onBack, onComplaintClick }: TrackComplaintsPro
   
   const filteredComplaints = filter === "all" 
     ? complaints 
-    : complaints.filter(c => c.status === filter);
+    : filter === "in-progress"
+      ? complaints.filter(c => c.status === "in-progress" || c.status === "resolved")
+      : complaints.filter(c => c.status === filter);
   
   const statusCounts = {
     all: complaints.length,
     pending: complaints.filter(c => c.status === "pending").length,
-    "in-progress": complaints.filter(c => c.status === "in-progress").length,
+    "in-progress": complaints.filter(c => c.status === "in-progress" || c.status === "resolved").length,
     completed: complaints.filter(c => c.status === "completed").length,
   };
   

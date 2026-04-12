@@ -64,7 +64,22 @@ class HostelService {
         return hostel.blocks;
     }
 
-    // 6. Synchronize Rooms for specific blocks
+    // 6. Update institution name for an admin
+    static async updateHostelNameByAdminUid(firebase_uid, institution_name) {
+        const User = require('../models/User');
+        const user = await User.findOne({ firebase_uid });
+        if (!user || user.role !== 'admin' || !user.hostel_id) {
+            throw new Error('Not authorized or hostel not found');
+        }
+        const hostel = await Hostel.findByIdAndUpdate(
+            user.hostel_id,
+            { institution_name },
+            { new: true }
+        );
+        return hostel.institution_name;
+    }
+
+    // 7. Synchronize Rooms for specific blocks
     static async syncRoomsForBlocks(admin_uid, blocks) {
         const user = await require('../models/User').findOne({ firebase_uid: admin_uid });
         if (!user || user.role !== 'admin') return;

@@ -21,6 +21,7 @@ export function AdminDashboard({ onNavigate, onComplaintClick, onLogout, onNotif
   const [complaints, setComplaints] = useState<Complaint[]>([]);
   const [isAnnouncementOpen, setIsAnnouncementOpen] = useState(false);
   const [hostelId, setHostelId] = useState("");
+  const [hasUnread, setHasUnread] = useState(false);
 
   useEffect(() => {
     const fetchAdminData = async () => {
@@ -53,6 +54,22 @@ export function AdminDashboard({ onNavigate, onComplaintClick, onLogout, onNotif
                 lastUpdate: new Date(c.created_time).toLocaleDateString()
             }));
             setComplaints(mapped);
+
+            // Check for unread
+            const savedRead = localStorage.getItem(`hostelconnect_read_notifications_${uid}`);
+            const readSet = new Set(savedRead ? JSON.parse(savedRead) : []);
+            
+            const hasNew = cmpData.some((c: any) => {
+               const ids = [`${c._id}-raised`];
+               if (c.status === "In Progress") ids.push(`${c._id}-inprogress`);
+               if (c.status === "Resolved") ids.push(`${c._id}-resolved`);
+               if (c.status === "Completed") ids.push(`${c._id}-completed`);
+               const slaDeadline = new Date(c.sla_deadline);
+               if (c.status === "Pending" && Date.now() > slaDeadline.getTime()) ids.push(`${c._id}-overdue`);
+               
+               return ids.some(id => !readSet.has(id));
+            });
+            setHasUnread(hasNew);
         }
       } catch (e) {
         console.error("Failed to load admin stats");
@@ -77,8 +94,11 @@ export function AdminDashboard({ onNavigate, onComplaintClick, onLogout, onNotif
             <h1 className="text-2xl">Admin Panel</h1>
           </div>
           <div className="flex items-center gap-2">
-            <button onClick={onNotifications} className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center hover:bg-white/30 transition-colors">
+            <button onClick={onNotifications} className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center hover:bg-white/30 transition-colors relative">
               <Bell className="w-5 h-5" />
+              {hasUnread && (
+                <span className="absolute top-2.5 right-2.5 w-2 h-2 bg-red-500 rounded-full border border-white" />
+              )}
             </button>
             <button onClick={handleLogout} className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center hover:bg-white/30 transition-colors">
               <LogOut className="w-5 h-5" />

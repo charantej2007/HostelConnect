@@ -25,31 +25,51 @@ export function AllComplaints({ onBack, onComplaintClick, userRole }: AllComplai
         const userRes = await fetch(`${API_URL}/api/auth/user/${uid}`);
         if (!userRes.ok) return;
         const data = await userRes.json();
-        const hostelId = data.hostel?._id || data.user?.hostel_id;
-        if (!hostelId) return;
+        const hostelId = data.hostel?._id || data.user?.hostel_id || data.hostel;
+        if (!hostelId) {
+            console.error("AllComplaints: No hostel ID found for user:", data.user);
+            return;
+        }
 
         const cmpRes = await fetch(`${API_URL}/api/complaints/${hostelId}`);
         if (!cmpRes.ok) return;
 
         const cmpData = await cmpRes.json();
+        const currentUserId = String(data.user._id);
+
+        // Filter: Staff only see their own assigned complaints; Admins see all
+        const filteredData = userRole === "worker"
+          ? cmpData.filter((c: any) => {
+              const assignedId = typeof c.worker_id === "string" ? c.worker_id : String(c.worker_id?._id || "");
+              return assignedId === currentUserId;
+            })
+          : cmpData;
+
+        console.log(`AllComplaints (${userRole}): Showing ${filteredData.length} of ${cmpData.length} complaints for user ${currentUserId}`);
 
         // Workers see all complaints; could be filtered to assigned ones if needed
-        const mapped: Complaint[] = cmpData.map((c: any) => ({
-          id: c._id.substring(c._id.length - 6),
-          _id: c._id,
-          type: c.complaint_type,
-          description: c.description,
-          status: c.status === "Pending" ? "pending"
-            : c.status === "In Progress" ? "in-progress"
-            : c.status === "Completed" ? "completed"
-            : "overdue",
-          assignedWorker: c.worker_id?.name || undefined,
-          studentName: c.student_id?.name || "Unknown Student",
-          roomNumber: c.student_id?.room_id?.room_number || undefined,
-          slaRemaining: Math.max(0, new Date(c.sla_deadline).getTime() - Date.now()) / (1000 * 60),
-          slaTotal: 24 * 60,
-          lastUpdate: new Date(c.created_time).toLocaleDateString(),
-        }));
+        const mapped: Complaint[] = filteredData.map((c: any) => {
+          const slaRemaining = Math.max(0, new Date(c.sla_deadline).getTime() - Date.now()) / (1000 * 60);
+          const isOverdue = slaRemaining <= 0 && c.status !== "Completed";
+
+          return {
+            id: c._id.substring(c._id.length - 6),
+            _id: c._id,
+            type: c.complaint_type,
+            description: c.description,
+            status: c.status === "Pending" ? "pending"
+              : c.status === "In Progress" ? "in-progress"
+              : c.status === "Resolved" ? "resolved"
+              : "completed",
+            isOverdue,
+            assignedWorker: c.worker_id?.name || undefined,
+            studentName: c.student_id?.name || "Unknown Student",
+            roomNumber: c.student_id?.room_id?.room_number || undefined,
+            slaRemaining,
+            slaTotal: 24 * 60,
+            lastUpdate: new Date(c.created_time).toLocaleDateString(),
+          };
+        });
 
         setComplaints(mapped);
       } catch (e) {
@@ -61,12 +81,16 @@ export function AllComplaints({ onBack, onComplaintClick, userRole }: AllComplai
     fetchComplaints();
   }, []);
 
-  const filtered = filter === "all" ? complaints : complaints.filter(c => c.status === filter);
+  const filtered = filter === "all" 
+    ? complaints 
+    : filter === "in-progress" 
+      ? complaints.filter(c => c.status === "in-progress" || c.status === "resolved")
+      : complaints.filter(c => c.status === filter);
 
   const counts = {
     all: complaints.length,
     pending: complaints.filter(c => c.status === "pending").length,
-    "in-progress": complaints.filter(c => c.status === "in-progress").length,
+    "in-progress": complaints.filter(c => c.status === "in-progress" || c.status === "resolved").length,
     completed: complaints.filter(c => c.status === "completed").length,
   };
 

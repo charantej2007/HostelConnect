@@ -27,22 +27,30 @@ const availableFacilities = ["Wi-Fi", "Mess", "Gym", "Library", "24/7 Security",
 
 export function ManageHostelInfo({ onBack }: ManageHostelInfoProps) {
   const [blocks, setBlocks] = useState<HostelBlock[]>([]);
+  const [institutionName, setInstitutionName] = useState("");
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [newName, setNewName] = useState("");
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const fetchBlocks = async () => {
+    const fetchHostelData = async () => {
       try {
         const uid = auth.currentUser?.uid;
         if (!uid) {
             setIsLoading(false);
             return;
         }
-        const response = await fetch(`${API_URL}/api/hostels/admin/${uid}/blocks`);
+        
+        // Fetch hostel details (including name and blocks)
+        const response = await fetch(`${API_URL}/api/hostels/admin-info/${uid}`);
         const data = await response.json();
+        
         if (response.ok) {
-          setBlocks(data.blocks || []);
+          setInstitutionName(data.hostel?.institution_name || "");
+          setNewName(data.hostel?.institution_name || "");
+          setBlocks(data.hostel?.blocks || []);
         } else {
-          toast.error(data.error || "Failed to fetch blocks");
+          toast.error(data.error || "Failed to fetch hostel data");
         }
       } catch (error) {
         toast.error("Network error");
@@ -50,7 +58,7 @@ export function ManageHostelInfo({ onBack }: ManageHostelInfoProps) {
         setIsLoading(false);
       }
     };
-    fetchBlocks();
+    fetchHostelData();
   }, []);
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -154,6 +162,35 @@ export function ManageHostelInfo({ onBack }: ManageHostelInfoProps) {
     }));
   };
 
+  const handleSaveName = async () => {
+    if (!newName.trim()) {
+      toast.error("Institution name cannot be empty");
+      return;
+    }
+
+    try {
+      const uid = auth.currentUser?.uid;
+      if (!uid) return;
+
+      const response = await fetch(`${API_URL}/api/hostels/admin/${uid}/name`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ institution_name: newName }),
+      });
+
+      const data = await response.json();
+      if (response.ok) {
+        setInstitutionName(newName);
+        setIsEditingName(false);
+        toast.success("Institution name updated!");
+      } else {
+        toast.error(data.error || "Failed to update name");
+      }
+    } catch (error) {
+      toast.error("Network error");
+    }
+  };
+
   return (
     <div className="min-h-screen bg-[#F5F7FA] pb-20">
       {/* Header */}
@@ -168,11 +205,59 @@ export function ManageHostelInfo({ onBack }: ManageHostelInfoProps) {
       </div>
 
       {/* Content */}
-      <div className="p-6 space-y-4">
+      <div className="p-6 space-y-6">
+        {/* Institution Name Section */}
+        <Card className="border-none shadow-md overflow-hidden bg-white">
+          <div className="p-4">
+            <div className="flex items-center justify-between mb-2">
+              <Label className="text-xs uppercase tracking-wider text-gray-500 font-bold">Institution Name</Label>
+              {!isEditingName && (
+                <button 
+                  onClick={() => setIsEditingName(true)}
+                  className="text-[#1E88E5] text-sm flex items-center gap-1 hover:underline"
+                >
+                  <Pencil className="w-3 h-3" /> Edit
+                </button>
+              )}
+            </div>
+            
+            {isEditingName ? (
+              <div className="space-y-3">
+                <Input 
+                  value={newName}
+                  onChange={(e) => setNewName(e.target.value)}
+                  placeholder="Enter institution name"
+                  className="h-10"
+                />
+                <div className="flex gap-2">
+                  <Button 
+                    onClick={handleSaveName}
+                    className="flex-1 h-9 bg-[#1E88E5] text-white text-sm"
+                  >
+                    Save
+                  </Button>
+                  <Button 
+                    variant="outline"
+                    onClick={() => {
+                      setIsEditingName(false);
+                      setNewName(institutionName);
+                    }}
+                    className="flex-1 h-9 text-sm"
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <h2 className="text-xl font-bold text-gray-800">{institutionName || "Loading..."}</h2>
+            )}
+          </div>
+        </Card>
+
         {/* Add New Button */}
         <Button
           onClick={handleAddNew}
-          className="w-full h-12 bg-gradient-to-r from-[#1E88E5] to-[#26A69A] text-white"
+          className="w-full h-12 bg-gradient-to-r from-[#1E88E5] to-[#26A69A] text-white shadow-md"
         >
           <Plus className="w-5 h-5 mr-2" />
           Add New Block

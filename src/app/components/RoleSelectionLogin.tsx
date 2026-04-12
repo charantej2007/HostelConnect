@@ -7,7 +7,9 @@ import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
 import { auth, googleProvider } from "../config/firebase.config";
-import { signInWithPopup, createUserWithEmailAndPassword, signInWithEmailAndPassword } from "firebase/auth";
+import { signInWithPopup, createUserWithEmailAndPassword, signInWithEmailAndPassword, updatePassword } from "firebase/auth";
+import { InputOTP, InputOTPGroup, InputOTPSlot } from "./ui/input-otp";
+import { toast } from "sonner";
 
 interface RoleSelectionLoginProps {
   onLogin: (role: "student" | "worker" | "admin") => void;
@@ -26,6 +28,13 @@ export function RoleSelectionLogin({ onLogin, onSignupComplete }: RoleSelectionL
   const [isLoading, setIsLoading] = useState(false);
   const [firebaseUser, setFirebaseUser] = useState<any>(null);
   const [errorMsg, setErrorMsg] = useState("");
+  
+  // OTP States
+  const [step, setStep] = useState<"credentials" | "otp" | "reset-password">("credentials");
+  const [otp, setOtp] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmNewPassword, setConfirmNewPassword] = useState("");
+  const [purpose, setPurpose] = useState<"signup" | "forgot-password">("signup");
 
   const roles = [
     {
@@ -57,7 +66,6 @@ export function RoleSelectionLogin({ onLogin, onSignupComplete }: RoleSelectionL
 
     if (!selectedRole) return;
 
-    // If firebaseUser is already set (from Google), handle directly
     if (firebaseUser) {
       if (isSignupMode) {
         onSignupComplete(selectedRole, true);
@@ -72,36 +80,31 @@ export function RoleSelectionLogin({ onLogin, onSignupComplete }: RoleSelectionL
 
     try {
       if (isSignupMode) {
-        // --- SIGNUP FLOW ---
         if (password !== confirmPassword) {
           setErrorMsg("Passwords do not match!");
           setIsLoading(false);
           return;
         }
 
-        // 1. Create user in Firebase Auth
-        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-        const newUser = userCredential.user;
-
-        // 2. Sync the new user with the backend (this will return needsOnboarding: true)
-        const idToken = await newUser.getIdToken();
-        await fetch(`${API_URL}/api/auth/sync`, {
+        // 1. Send OTP instead of creating user immediately
+        const response = await fetch(`${API_URL}/api/auth/send-otp`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ idToken, role: selectedRole })
+          body: JSON.stringify({ email, purpose: "signup" })
         });
 
-        setFirebaseUser(newUser);
-        // Redirect to code verification / onboarding
-        onSignupComplete(selectedRole, true);
+        if (!response.ok) {
+          const data = await response.json();
+          throw new Error(data.error || "Failed to send OTP");
+        }
 
+        setPurpose("signup");
+        setStep("otp");
+        toast.success("OTP sent to your email!");
       } else {
         // --- LOGIN FLOW ---
-        // 1. Sign in with Firebase Auth
         const userCredential = await signInWithEmailAndPassword(auth, email, password);
         const existingUser = userCredential.user;
-
-        // 2. Sync with backend to find existing MongoDB record
         const idToken = await existingUser.getIdToken();
         const response = await fetch(`${API_URL}/api/auth/sync`, {
           method: "POST",
@@ -110,12 +113,9 @@ export function RoleSelectionLogin({ onLogin, onSignupComplete }: RoleSelectionL
         });
 
         const data = await response.json();
-
         if (data.user && data.user.hostel_id) {
-          // Fully onboarded user → go to dashboard
           onLogin(data.user.role);
         } else {
-          // User is partially onboarded but tried to log in
           setErrorMsg("Your registration is incomplete. Please use 'Sign Up' to enter your join code.");
           setIsLoading(false);
           return;
@@ -123,17 +123,108 @@ export function RoleSelectionLogin({ onLogin, onSignupComplete }: RoleSelectionL
       }
     } catch (error: any) {
       console.error("Auth error:", error);
-      if (error.code === "auth/email-already-in-use") {
-        setErrorMsg("This email is already registered. Try logging in instead.");
-      } else if (error.code === "auth/invalid-credential" || error.code === "auth/wrong-password") {
-        setErrorMsg("Incorrect email or password.");
-      } else if (error.code === "auth/user-not-found") {
-        setErrorMsg("No account found with this email. Please sign up first.");
-      } else if (error.code === "auth/weak-password") {
-        setErrorMsg("Password must be at least 6 characters.");
-      } else {
-        setErrorMsg(error.message || "Authentication failed. Please try again.");
+      setErrorMsg(error.message || "Authentication failed.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleForgotPassword = async () => {
+    if (!email) {
+      setErrorMsg("Please enter your email address first.");
+      return;
+    }
+    setErrorMsg("");
+    setIsLoading(true);
+    try {
+      const response = await fetch(`${API_URL}/api/auth/send-otp`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, purpose: "forgot-password" })
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || "Failed to send OTP");
       }
+
+      setPurpose("forgot-password");
+      setStep("otp");
+      toast.success("Password reset OTP sent to your email!");
+    } catch (error: any) {
+      setErrorMsg(error.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const verifyOTPAndProceed = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (otp.length !== 6) return;
+    
+    setErrorMsg("");
+    setIsLoading(true);
+    try {
+      const resp = await fetch(`${API_URL}/api/auth/verify-otp`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, otp, purpose })
+      });
+
+      if (!resp.ok) {
+        const data = await resp.json();
+        throw new Error(data.error || "Invalid OTP");
+      }
+
+      if (purpose === "signup") {
+        // Create user in Firebase now
+        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+        const newUser = userCredential.user;
+        const idToken = await newUser.getIdToken();
+        await fetch(`${API_URL}/api/auth/sync`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ idToken, role: selectedRole })
+        });
+        setFirebaseUser(newUser);
+        onSignupComplete(selectedRole!, true);
+      } else {
+        // Forgot password flow
+        setStep("reset-password");
+      }
+    } catch (error: any) {
+      setErrorMsg(error.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleResetPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (newPassword !== confirmNewPassword) {
+      setErrorMsg("Passwords do not match!");
+      return;
+    }
+    
+    setErrorMsg("");
+    setIsLoading(true);
+    try {
+      const response = await fetch(`${API_URL}/api/auth/reset-password`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, newPassword, otp })
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || "Failed to reset password");
+      }
+
+      toast.success("Password reset successfully! Please login.");
+      setStep("credentials");
+      setIsSignupMode(false);
+    } catch (error: any) {
+      setErrorMsg(error.message);
     } finally {
       setIsLoading(false);
     }
@@ -175,6 +266,7 @@ export function RoleSelectionLogin({ onLogin, onSignupComplete }: RoleSelectionL
 
   const toggleMode = () => {
     setIsSignupMode(!isSignupMode);
+    setStep("credentials");
     setEmail("");
     setPassword("");
     setConfirmPassword("");
@@ -262,6 +354,7 @@ export function RoleSelectionLogin({ onLogin, onSignupComplete }: RoleSelectionL
           </CardHeader>
           
           <CardContent>
+            {step === "credentials" && (
             <form onSubmit={handleLogin} className="space-y-4">
               {!firebaseUser && (
                 <>
@@ -348,9 +441,10 @@ export function RoleSelectionLogin({ onLogin, onSignupComplete }: RoleSelectionL
                 </div>
               )}
 
-              {!isSignupMode && (
+              {!isSignupMode && !firebaseUser && (
                 <button
                   type="button"
+                  onClick={handleForgotPassword}
                   className="text-sm text-[#1E88E5] hover:underline"
                 >
                   Forgot password?
@@ -368,7 +462,7 @@ export function RoleSelectionLogin({ onLogin, onSignupComplete }: RoleSelectionL
                 disabled={isLoading}
                 className={`w-full h-12 bg-gradient-to-r ${currentRole.color} text-white hover:opacity-90 transition-opacity`}
               >
-                {isLoading ? "Please wait..." : isSignupMode ? (firebaseUser ? "Complete Signup" : "Sign Up") : (firebaseUser ? "Continue to Dashboard" : "Login")}
+                {isLoading ? "Please wait..." : isSignupMode ? (firebaseUser ? "Complete Signup" : "Send Signup OTP") : (firebaseUser ? "Continue to Dashboard" : "Login")}
               </Button>
 
               <div className="text-center">
@@ -422,6 +516,98 @@ export function RoleSelectionLogin({ onLogin, onSignupComplete }: RoleSelectionL
                 </>
               )}
             </form>
+            )}
+
+            {step === "otp" && (
+              <form onSubmit={verifyOTPAndProceed} className="space-y-6 text-center">
+                <div>
+                  <h3 className="text-lg font-semibold">Verify Email</h3>
+                  <p className="text-sm text-gray-600">Enter the 6-digit code sent to {email}</p>
+                </div>
+
+                <div className="flex justify-center">
+                  <InputOTP maxLength={6} value={otp} onChange={setOtp}>
+                    <InputOTPGroup>
+                      {[0, 1, 2, 3, 4, 5].map((i) => (
+                        <InputOTPSlot key={i} index={i} className="w-10 h-12" />
+                      ))}
+                    </InputOTPGroup>
+                  </InputOTP>
+                </div>
+
+                {errorMsg && (
+                  <div className="p-3 bg-red-50 text-red-700 text-sm rounded-lg">
+                    {errorMsg}
+                  </div>
+                )}
+
+                <div className="space-y-3">
+                  <Button 
+                    type="submit" 
+                    disabled={isLoading || otp.length !== 6}
+                    className={`w-full h-12 bg-gradient-to-r ${currentRole.color} text-white`}
+                  >
+                    {isLoading ? "Verifying..." : "Verify OTP"}
+                  </Button>
+                  <button
+                    type="button"
+                    onClick={() => setStep("credentials")}
+                    className="text-sm text-gray-500 hover:underline"
+                  >
+                    Change email
+                  </button>
+                </div>
+              </form>
+            )}
+
+            {step === "reset-password" && (
+              <form onSubmit={handleResetPassword} className="space-y-4">
+                <div className="text-center mb-4">
+                  <h3 className="text-lg font-semibold">Reset Password</h3>
+                  <p className="text-sm text-gray-600">Create a new password for your account</p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="newPassword">New Password</Label>
+                  <Input
+                    id="newPassword"
+                    type="password"
+                    placeholder="Minimal 6 characters"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    className="h-12"
+                    required
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="confirmNewPassword">Confirm New Password</Label>
+                  <Input
+                    id="confirmNewPassword"
+                    type="password"
+                    placeholder="Repeat new password"
+                    value={confirmNewPassword}
+                    onChange={(e) => setConfirmNewPassword(e.target.value)}
+                    className="h-12"
+                    required
+                  />
+                </div>
+
+                {errorMsg && (
+                  <div className="p-3 bg-red-50 text-red-700 text-sm rounded-lg">
+                    {errorMsg}
+                  </div>
+                )}
+
+                <Button 
+                  type="submit" 
+                  disabled={isLoading}
+                  className={`w-full h-12 bg-gradient-to-r ${currentRole.color} text-white`}
+                >
+                  {isLoading ? "Updating..." : "Update Password"}
+                </Button>
+              </form>
+            )}
           </CardContent>
         </Card>
       </motion.div>

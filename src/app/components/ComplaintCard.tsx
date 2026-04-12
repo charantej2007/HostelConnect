@@ -8,13 +8,16 @@ export interface Complaint {
   _id?: string;  // full MongoDB ObjectId for API calls
   type: string;
   description: string;
-  status: "pending" | "in-progress" | "completed" | "overdue";
+  status: "pending" | "in-progress" | "resolved" | "completed";
+  isOverdue?: boolean;
   assignedWorker?: string;
   roomNumber?: string;
   studentName?: string;
   slaRemaining: number;
   slaTotal: number;
   lastUpdate: string;
+  attachments?: string[];
+  proof_attachments?: string[];
 }
 
 interface ComplaintCardProps {
@@ -27,6 +30,7 @@ interface ComplaintCardProps {
 const statusColors = {
   pending: "bg-[#FB8C00] text-white",
   "in-progress": "bg-[#1E88E5] text-white",
+  resolved: "bg-[#9C27B0] text-white", // Purple for resolution verification
   completed: "bg-[#43A047] text-white",
   overdue: "bg-[#E53935] text-white",
 };
@@ -34,6 +38,7 @@ const statusColors = {
 const statusLabels = {
   pending: "Pending",
   "in-progress": "In Progress",
+  resolved: "Resolved (Pending Approval)",
   completed: "Completed",
   overdue: "Overdue",
 };
@@ -47,8 +52,8 @@ export function ComplaintCard({ complaint, onClick, showWorker = false, showStud
             <p className="text-xs text-gray-500">#{complaint.id}</p>
             <h3 className="font-semibold text-base mt-1">{complaint.type}</h3>
           </div>
-          <Badge className={`${statusColors[complaint.status]} text-xs px-2 py-1`}>
-            {statusLabels[complaint.status]}
+          <Badge className={`${complaint.isOverdue ? statusColors.overdue : statusColors[complaint.status]} text-xs px-2 py-1`}>
+            {complaint.isOverdue && complaint.status !== "completed" ? "Overdue" : statusLabels[complaint.status]}
           </Badge>
         </div>
         

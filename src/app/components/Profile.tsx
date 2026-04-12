@@ -54,7 +54,7 @@ export function Profile({ onBack, onLogout, userRole }: ProfileProps) {
                 setComplaintStats({
                   total: cmps.length,
                   pending: cmps.filter((c: any) => c.status === "Pending").length,
-                  resolved: cmps.filter((c: any) => c.status === "Completed").length,
+                  resolved: cmps.filter((c: any) => c.status === "Completed" || c.status === "Resolved").length,
                 });
               }
             }
@@ -70,7 +70,7 @@ export function Profile({ onBack, onLogout, userRole }: ProfileProps) {
             setComplaintStats({
               total: mine.length,
               pending: mine.filter((c: any) => c.status === "Pending").length,
-              resolved: mine.filter((c: any) => c.status === "Completed").length,
+              resolved: mine.filter((c: any) => c.status === "Completed" || c.status === "Resolved").length,
             });
           }
         }

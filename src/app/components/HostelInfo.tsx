@@ -15,6 +15,7 @@ const facilityIcons: Record<string, any> = {
 
 export function HostelInfo({ onBack }: HostelInfoProps) {
   const [hostel, setHostel] = useState<any>(null);
+  const [userBlock, setUserBlock] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -31,6 +32,10 @@ export function HostelInfo({ onBack }: HostelInfoProps) {
         if (roomRes.ok) {
           const data = await roomRes.json();
           hostelId = data.hostel?._id || null;
+          // If from room lookup, we already have the block
+          if (data.room?.block) {
+            setUserBlock(data.room.block);
+          }
         }
 
         // If not a student, get via user record
@@ -39,6 +44,10 @@ export function HostelInfo({ onBack }: HostelInfoProps) {
           if (userRes.ok) {
             const data = await userRes.json();
             hostelId = data.hostel?._id || data.user?.hostel_id || null;
+            // Also try to get block from room lookup in user record if populated
+            if (data.user?.room_id?.block) {
+                setUserBlock(data.user.room_id.block);
+            }
           }
         }
 
@@ -134,7 +143,14 @@ export function HostelInfo({ onBack }: HostelInfoProps) {
             {hostel.blocks && hostel.blocks.length > 0 ? (
               <>
                 <h2 className="text-base font-bold text-gray-700 mt-2">Blocks</h2>
-                {hostel.blocks.map((block: any, i: number) => (
+                {hostel.blocks
+                  .filter((block: any) => {
+                    // If student and has an assigned block, show only that block. 
+                    // Otherwise show all.
+                    if (userBlock) return block.blockName === userBlock;
+                    return true;
+                  })
+                  .map((block: any, i: number) => (
                   <Card key={block.id || i} className="border-none shadow-md overflow-hidden">
                     <div className="h-1 bg-gradient-to-r from-[#26A69A] to-[#1E88E5]" />
                     <CardContent className="p-4 space-y-3">

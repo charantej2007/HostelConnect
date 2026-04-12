@@ -16,6 +16,7 @@ export function StudentDashboard({ onNavigate, onLogout, onNotifications }: Stud
   const [userData, setUserData] = useState<any>(null);
   const [roomData, setRoomData] = useState<any>(null);
   const [activeComplaintsCount, setActiveComplaintsCount] = useState(0);
+  const [hasUnread, setHasUnread] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -23,17 +24,46 @@ export function StudentDashboard({ onNavigate, onLogout, onNotifications }: Stud
         const uid = auth.currentUser?.uid;
         if (!uid) return;
         
-        const roomRes = await fetch(`${API_URL}/api/rooms/student/${uid}`);
-        if (!roomRes.ok) return;
-        const data = await roomRes.json();
+        const userRes = await fetch(`${API_URL}/api/auth/user/${uid}`);
+        if (!userRes.ok) return;
+        const data = await userRes.json();
         setUserData(data.user);
-        setRoomData(data.room);
         
-        // Fetch complaints
-        const cmpRes = await fetch(`${API_URL}/api/complaints/${data.hostel._id}?student_id=${data.user._id}`);
-        if (cmpRes.ok) {
-           const complaints = await cmpRes.json();
-           setActiveComplaintsCount(complaints.filter((c:any) => c.status !== 'Completed').length);
+        // For students, fetch room info
+        if (data.user?.role === "student") {
+          const roomRes = await fetch(`${API_URL}/api/rooms/student/${uid}`);
+          if (roomRes.ok) {
+            const roomData = await roomRes.json();
+            setRoomData(roomData.room);
+          }
+        }
+        
+        // Fetch complaints with robust ID lookup
+        const hostelId = data.hostel?._id || data.user?.hostel_id || data.hostel;
+        const studentId = data.user?._id;
+
+        if (hostelId) {
+          const cmpRes = await fetch(`${API_URL}/api/complaints/${hostelId}?student_id=${studentId}`);
+          if (cmpRes.ok) {
+             console.log(`StudentDashboard: Found ${complaints.length} complaints for student ${studentId} in hostel ${hostelId}`);
+             setActiveComplaintsCount(complaints.filter((c:any) => c.status !== 'Completed').length);
+             
+             // Check for unread
+             const savedRead = localStorage.getItem(`hostelconnect_read_notifications_${uid}`);
+             const readSet = new Set(savedRead ? JSON.parse(savedRead) : []);
+             
+             const hasNew = complaints.some((c: any) => {
+                const ids = [`${c._id}-raised`];
+                if (c.status === "In Progress") ids.push(`${c._id}-inprogress`);
+                if (c.status === "Resolved") ids.push(`${c._id}-resolved`);
+                if (c.status === "Completed") ids.push(`${c._id}-completed`);
+                const slaDeadline = new Date(c.sla_deadline);
+                if (c.status === "Pending" && Date.now() > slaDeadline.getTime()) ids.push(`${c._id}-overdue`);
+                
+                return ids.some(id => !readSet.has(id));
+             });
+             setHasUnread(hasNew);
+          }
         }
       } catch (e) {
         console.error(e);
@@ -96,8 +126,11 @@ export function StudentDashboard({ onNavigate, onLogout, onNotifications }: Stud
             <h1 className="text-2xl">{userData?.name || "Loading..."}</h1>
           </div>
           <div className="flex items-center gap-2">
-            <button onClick={onNotifications} className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center hover:bg-white/30 transition-colors">
+            <button onClick={onNotifications} className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center hover:bg-white/30 transition-colors relative">
               <Bell className="w-5 h-5" />
+              {hasUnread && (
+                <span className="absolute top-2.5 right-2.5 w-2 h-2 bg-red-500 rounded-full border border-white" />
+              )}
             </button>
             <button onClick={handleLogout} className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center hover:bg-white/30 transition-colors">
               <LogOut className="w-5 h-5" />

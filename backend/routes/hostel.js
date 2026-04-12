@@ -31,9 +31,10 @@ router.get('/:hostel_id/stats', async (req, res) => {
         const totalStudents = await User.countDocuments({ hostel_id: req.params.hostel_id, role: 'student' });
         const totalWorkers = await User.countDocuments({ hostel_id: req.params.hostel_id, role: 'worker' });
         const pendingComplaints = await Complaint.countDocuments({ hostel_id: req.params.hostel_id, status: 'Pending' });
-        const resolvedComplaints = await Complaint.countDocuments({ hostel_id: req.params.hostel_id, status: 'Completed' });
-        const activeComplaints = await Complaint.countDocuments({ hostel_id: req.params.hostel_id, status: 'In Progress' });
-        const totalComplaints = pendingComplaints + resolvedComplaints + activeComplaints;
+        const resolvedComplaints = await Complaint.countDocuments({ hostel_id: req.params.hostel_id, status: 'Resolved' });
+        const inProgressComplaints = await Complaint.countDocuments({ hostel_id: req.params.hostel_id, status: 'In Progress' });
+        const completedComplaints = await Complaint.countDocuments({ hostel_id: req.params.hostel_id, status: 'Completed' });
+        const totalComplaints = pendingComplaints + resolvedComplaints + inProgressComplaints + completedComplaints;
         
         res.json({
             totalStudents,
@@ -41,8 +42,9 @@ router.get('/:hostel_id/stats', async (req, res) => {
             complaints: {
                 total: totalComplaints,
                 pending: pendingComplaints,
-                in_progress: activeComplaints,
-                resolved: resolvedComplaints
+                in_progress: inProgressComplaints,
+                resolved: resolvedComplaints,
+                completed: completedComplaints
             }
         });
     } catch (error) {
@@ -91,6 +93,16 @@ router.put('/admin/:uid/blocks', async (req, res) => {
         const updatedBlocks = await HostelService.updateBlocksByAdminUid(req.params.uid, blocks);
         await HostelService.syncRoomsForBlocks(req.params.uid, updatedBlocks);
         res.json({ blocks: updatedBlocks });
+    } catch (error) {
+        res.status(400).json({ error: error.message });
+    }
+});
+
+router.put('/admin/:uid/name', async (req, res) => {
+    try {
+        const { institution_name } = req.body;
+        const updatedName = await HostelService.updateHostelNameByAdminUid(req.params.uid, institution_name);
+        res.json({ institution_name: updatedName });
     } catch (error) {
         res.status(400).json({ error: error.message });
     }
