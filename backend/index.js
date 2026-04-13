@@ -50,13 +50,23 @@ mongoose.connect(process.env.MONGODB_URI)
     .catch((err) => console.error('MongoDB connection error:', err));
 
 // Middleware - CORS allows Vercel frontend and local dev
+// Middleware - CORS configuration
+const allowedOrigins = [
+    'http://localhost:5173',
+    'http://localhost:3000',
+    'https://hostelconnect-gg4x.onrender.com', // Replace with your actual frontend domain if different
+    /vercel\.app$/ // Allows all Vercel preview deployments
+];
+
 app.use(cors({
-    origin: [
-        'http://localhost:5173',
-        'http://localhost:3000',
-        /\.vercel\.app$/,       // any Vercel preview/prod URL
-        /\.onrender\.com$/,     // Render itself
-    ],
+    origin: (origin, callback) => {
+        // Allow requests with no origin (like mobile apps or curl requests)
+        if (!origin) return callback(null, true);
+        if (allowedOrigins.some(o => typeof o === 'string' ? o === origin : o.test(origin))) {
+            return callback(null, true);
+        }
+        return callback(new Error('Not allowed by CORS'));
+    },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization']

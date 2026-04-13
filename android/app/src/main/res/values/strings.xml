@@ -4,4 +4,6 @@
     <string name="title_activity_main">HostelConnect</string>
     <string name="package_name">com.hostelconnect.app</string>
     <string name="custom_url_scheme">com.hostelconnect.app</string>
+    <string name="server_client_id">467012019057-raant1fk0n1kk06fmm2fiktjcgnffvqm.apps.googleusercontent.com</string>
+    <string name="reversed_client_id">com.googleusercontent.apps.467012019057-raant1fk0n1kk06fmm2fiktjcgnffvqm</string>
 </resources>

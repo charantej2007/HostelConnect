@@ -1,13 +1,14 @@
 import { API_URL } from "../config/api.config";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "motion/react";
 import { User, Wrench, Shield, Building2, Mail, Lock, Eye, EyeOff } from "lucide-react";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
-import { auth, googleProvider } from "../config/firebase.config";
-import { signInWithPopup, createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswordResetEmail } from "firebase/auth";
+import { auth } from "../config/firebase.config";
+import { GoogleAuthProvider, signInWithCredential, createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswordResetEmail } from "firebase/auth";
+import { GoogleAuth } from "@codetrix-studio/capacitor-google-auth";
 import { toast } from "sonner";
 
 interface RoleSelectionLoginProps {
@@ -27,6 +28,17 @@ export function RoleSelectionLogin({ onLogin, onSignupComplete }: RoleSelectionL
   const [isLoading, setIsLoading] = useState(false);
   const [firebaseUser, setFirebaseUser] = useState<any>(null);
   const [errorMsg, setErrorMsg] = useState("");
+
+  useEffect(() => {
+    // Initialize Google Auth plugin safely
+    try {
+      GoogleAuth.initialize({
+        clientId: '467012019057-raant1fk0n1kk06fmm2fiktjcgnffvqm.apps.googleusercontent.com'
+      });
+    } catch (e) {
+      console.warn("GoogleAuth plugin not initialized (this is expected in browser or if plugin is missing):", e);
+    }
+  }, []);
   
   const roles = [
     {
@@ -78,74 +90,84 @@ export function RoleSelectionLogin({ onLogin, onSignupComplete }: RoleSelectionL
           return;
         }
 
-        // DIRECT SIGNUP (NO OTP)
-        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-        const newUser = userCredential.user;
-        const idToken = await newUser.getIdToken();
-        
-        await fetch(`${API_URL}/api/auth/sync`, {
+        // NATIVE MONGODB SIGNUP (No Firebase)
+        const response = await fetch(`${API_URL}/api/auth/register`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ idToken, role: selectedRole })
-        });
-        
-        setFirebaseUser(newUser);
-        onSignupComplete(selectedRole, true);
-      } else {
-        // --- LOGIN FLOW ---
-        const userCredential = await signInWithEmailAndPassword(auth, email, password);
-        const existingUser = userCredential.user;
-        const idToken = await existingUser.getIdToken();
-        const response = await fetch(`${API_URL}/api/auth/sync`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ idToken, role: selectedRole })
+          body: JSON.stringify({ 
+            name: email.split('@')[0], 
+            email, 
+            password, 
+            role: selectedRole 
+          })
         });
 
         const data = await response.json();
+        if (!response.ok) {
+          throw new Error(data.error || "Signup failed");
+        }
+
+        // Store session (JWT can be stored in localStorage for persistence)
+        localStorage.setItem("token", data.token);
+        localStorage.setItem("user", JSON.stringify(data.user));
+        
+        onSignupComplete(data.user.role, true);
+      } else {
+        // --- NATIVE MONGODB LOGIN (No Firebase) ---
+        const response = await fetch(`${API_URL}/api/auth/login`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email, password })
+        });
+
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(data.error || "Login failed");
+        }
+
+        // Store session
+        localStorage.setItem("token", data.token);
+        localStorage.setItem("user", JSON.stringify(data.user));
+
         if (data.user && data.user.hostel_id) {
           onLogin(data.user.role);
         } else {
-          setErrorMsg("Your registration is incomplete. Please use 'Sign Up' to enter your join code.");
+          setErrorMsg("Your registration is incomplete. Please use 'Sign Up' to complete your profile.");
           setIsLoading(false);
           return;
         }
       }
     } catch (error: any) {
       console.error("Auth error:", error);
-      setErrorMsg(error.message || "Authentication failed.");
+      if (error.message.includes("Failed to fetch")) {
+         setErrorMsg("Cannot connect to server. Please check your internet or if the server is down.");
+      } else {
+         setErrorMsg(error.message || "Authentication failed.");
+      }
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleForgotPassword = async () => {
-    if (!email) {
-      setErrorMsg("Please enter your email address first.");
-      return;
-    }
-    setErrorMsg("");
-    setIsLoading(true);
-    try {
-      // Switch exclusively to Firebase native reset email
-      await sendPasswordResetEmail(auth, email);
-      toast.success("Password reset link sent to your email! Please check your inbox.");
-      setErrorMsg(""); 
-    } catch (error: any) {
-      console.error("Forgot Password Error:", error);
-      setErrorMsg("Failed to send reset email: " + (error.code || error.message));
-    } finally {
-      setIsLoading(false);
-    }
-  };
+
 
   const handleGoogleLogin = async () => {
+    if (!selectedRole) {
+      setErrorMsg("Please select a role first.");
+      return;
+    }
+    
     setIsLoading(true);
     try {
-      const result = await signInWithPopup(auth, googleProvider);
+      const googleUser = await GoogleAuth.signIn();
+      const idToken = googleUser.authentication.idToken;
+      
+      // Sign in to Firebase with the token from native login
+      const credential = GoogleAuthProvider.credential(idToken);
+      const result = await signInWithCredential(auth, credential);
+      
       setFirebaseUser(result.user);
       
-      const idToken = await result.user.getIdToken();
       const response = await fetch(`${API_URL}/api/auth/sync`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -163,7 +185,8 @@ export function RoleSelectionLogin({ onLogin, onSignupComplete }: RoleSelectionL
         setIsSignupMode(true);
       }
     } catch (error: any) {
-      alert("Google Login failed: " + error.message);
+      console.error("Native Google Login failed:", error);
+      setErrorMsg("Google Login failed: " + (error.message || "Unknown error"));
     } finally {
       setIsLoading(false);
     }
@@ -342,15 +365,7 @@ export function RoleSelectionLogin({ onLogin, onSignupComplete }: RoleSelectionL
                 </div>
               )}
 
-              {!isSignupMode && !firebaseUser && (
-                <button
-                  type="button"
-                  onClick={handleForgotPassword}
-                  className="text-sm text-[#1E88E5] hover:underline"
-                >
-                  Forgot password?
-                </button>
-              )}
+
               
               {errorMsg && (
                 <div className="p-3 bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg">

@@ -1,8 +1,10 @@
 // AuthService.js - Business Logic for MongoDB & Firebase Auth
 const admin = require('firebase-admin');
-const User = require('../models/User');
 const Hostel = require('../models/Hostel');
 const crypto = require('crypto');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+const User = require('../models/User'); // Ensure User model is required
 
 class AuthService {
     // 1. Verify Firebase ID Token (Backend-side authentication)
@@ -160,22 +162,109 @@ class AuthService {
     }
 
     // 4. Login Sync (Finds user by firebase_uid or email)
-    static async syncUser(decodedToken, role) {
+    static async syncUser(decodedToken, role, password = null) {
         let user = await User.findOne({ 
             $or: [{ firebase_uid: decodedToken.uid }, { email: decodedToken.email }] 
         }).populate('hostel_id');
         
+        // If password is provided, we either hash it for a new user or verify for an existing one
+        let passwordHash = null;
+        if (password) {
+            passwordHash = await bcrypt.hash(password, 10);
+        }
+
         if (!user && role) {
             user = new User({
                 name: decodedToken.name || decodedToken.email.split('@')[0],
                 email: decodedToken.email,
                 firebase_uid: decodedToken.uid,
-                role: role
+                role: role,
+                password_hash: passwordHash // Store hashed password on signup
             });
             await user.save();
+        } else if (user) {
+            // Update firebase_uid if it was missing (e.g. legacy account or first time Google login)
+            if (!user.firebase_uid) {
+                user.firebase_uid = decodedToken.uid;
+                await user.save();
+            }
+            
+            // If user exists and password is provided (login/sync session), 
+            // we verify it against the stored hash if it exists.
+            if (password && user.password_hash) {
+                const isMatch = await bcrypt.compare(password, user.password_hash);
+                if (!isMatch) {
+                    throw new Error('Database password validation failed. Please check your credentials.');
+                }
+            } else if (password && !user.password_hash) {
+                // If user exists but has no hash (e.g. legacy), we can retroactively store it
+                user.password_hash = passwordHash;
+                await user.save();
+            }
         }
 
         return user;
+    }
+
+    // 5. Native MongoDB Signup (Updated to preserve past data)
+    static async signup({ name, email, password, role }) {
+        let user = await User.findOne({ email });
+        
+        if (user && user.password_hash) {
+            throw new Error('User with this email already exists with a password.');
+        }
+
+        const password_hash = await bcrypt.hash(password, 10);
+
+        if (user) {
+            // Preservation logic: Update existing record that was created via Google/Firebase sync
+            user.password_hash = password_hash;
+            user.name = name || user.name;
+            user.role = role || user.role;
+            await user.save();
+        } else {
+            // New user creation
+            user = new User({
+                name,
+                email,
+                password_hash,
+                role
+            });
+            await user.save();
+        }
+        
+        const token = jwt.sign(
+            { id: user._id, email: user.email, role: user.role },
+            process.env.JWT_SECRET,
+            { expiresIn: '7d' }
+        );
+
+        return { user, token };
+    }
+
+    // 6. Native MongoDB Login
+    static async login(email, password) {
+        const user = await User.findOne({ email }).populate('hostel_id');
+        if (!user) {
+            throw new Error('User not found');
+        }
+
+        if (!user.password_hash) {
+            throw new Error('This account was created via Google. Please use "Continue with Google".');
+        }
+
+        const isMatch = await bcrypt.compare(password, user.password_hash);
+        if (!isMatch) {
+            throw new Error('Invalid credentials');
+        }
+
+        const token = jwt.sign(
+            { id: user._id, email: user.email, role: user.role },
+            process.env.JWT_SECRET,
+            { expiresIn: '7d' }
+        );
+
+        return { user, token };
     }
 
     static generateUniqueCode(prefix) {

@@ -7,21 +7,29 @@ const admin = require('firebase-admin');
 
 // POST /api/auth/verify-and-sync
 // Logic: Verifies Firebase ID Token and finds/creates the user record in MongoDB.
-router.post('/sync', async (req, res) => {
-    try {
-        const { idToken, role } = req.body;
-        const decodedToken = await AuthService.verifyToken(idToken);
-        const user = await AuthService.syncUser(decodedToken, role);
-        
-        if (!user || !user.hostel_id) {
-            return res.status(200).json({ 
-                needsOnboarding: true, 
-                decodedToken,
-                user
-            });
-        }
-        
         res.json({ user });
+    } catch (error) {
+        res.status(401).json({ error: error.message });
+    }
+});
+
+// POST /api/auth/register (Native MongoDB)
+router.post('/register', async (req, res) => {
+    try {
+        const { name, email, password, role } = req.body;
+        const result = await AuthService.signup({ name, email, password, role });
+        res.status(201).json(result);
+    } catch (error) {
+        res.status(400).json({ error: error.message });
+    }
+});
+
+// POST /api/auth/login (Native MongoDB)
+router.post('/login', async (req, res) => {
+    try {
+        const { email, password } = req.body;
+        const result = await AuthService.login(email, password);
+        res.json(result);
     } catch (error) {
         res.status(401).json({ error: error.message });
     }

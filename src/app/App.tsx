@@ -73,8 +73,12 @@ export default function App() {
 
     if (role === "admin" && isFirstTime) {
       setCurrentScreen("admin-setup");
-    } else if ((role === "student" || role === "worker") && isFirstTime) {
-      setCurrentScreen("code-verification");
+    } else if (role === "student" && isFirstTime) {
+      // Go directly to onboarding instead of verification
+      // We'll need to handle the missing hostelId in onboarding form
+      setCurrentScreen("student-onboarding");
+      // Set a dummy or default hostel ID if none exists yet, or let user pick/enter it in onboarding
+      setActiveHostelId("default"); 
     } else {
       setCurrentScreen("dashboard");
       setActiveTab("dashboard");
