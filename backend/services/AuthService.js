@@ -246,16 +246,16 @@ class AuthService {
     static async login(email, password) {
         const user = await User.findOne({ email }).populate('hostel_id');
         if (!user) {
-            throw new Error('User not found');
+            throw new Error('User not found. Please Sign Up to create an account.');
         }
 
         if (!user.password_hash) {
-            throw new Error('This account was created via Google. Please use "Continue with Google".');
+            throw new Error('No password set for this account. If you used "Continue with Google" before, please use "Sign Up" with the same email to set a password.');
         }
 
         const isMatch = await bcrypt.compare(password, user.password_hash);
         if (!isMatch) {
-            throw new Error('Invalid credentials');
+            throw new Error('Invalid email or password.');
         }
 
         const token = jwt.sign(
