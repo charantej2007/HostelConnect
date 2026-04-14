@@ -56,7 +56,10 @@ const allowedOrigins = [
     'http://localhost:3000',
     'https://hostelconnect-eg4x.onrender.com',
     'https://hostel-connect-amber.vercel.app',
-    /vercel\.app$/ // Allows all Vercel preview deployments
+    'https://hostelconnect.app',        // Capacitor Android WebView
+    'capacitor://localhost',             // Capacitor iOS WebView
+    'http://localhost',                  // Capacitor fallback
+    /vercel\.app$/
 ];
 
 app.use(cors({

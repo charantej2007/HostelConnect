@@ -1,0 +1,47 @@
+{
+    "project_info": {
+        "project_number": "467012019057",
+        "project_id": "hostelconnect-608b0",
+        "storage_bucket": "hostelconnect-608b0.firebasestorage.app"
+    },
+    "client": [
+        {
+            "client_info": {
+                "mobilesdk_app_id": "1:467012019057:android:1a021ce4830c41c2ed0cd0",
+                "android_client_info": {
+                    "package_name": "com.hostelconnect.app"
+                }
+            },
+            "oauth_client": [
+                {
+                    "client_id": "467012019057-raant1fk0n1kk06fmm2fiktjcgnffvqm.apps.googleusercontent.com",
+                    "client_type": 3
+                },
+                {
+                    "client_id": "467012019057-raant1fk0n1kk06fmm2fiktjcgnffvqm.apps.googleusercontent.com",
+                    "client_type": 1,
+                    "android_info": {
+                        "package_name": "com.hostelconnect.app",
+                        "certificate_hash": "492fb10477b160328c038103441605661bb9a7c0"
+                    }
+                }
+            ],
+            "api_key": [
+                {
+                    "current_key": "AIzaSyAEf7UlEdtoE211hqlRyCNhemRzsg2z5Ys"
+                }
+            ],
+            "services": {
+                "appinvite_service": {
+                    "other_platform_oauth_client": [
+                        {
+                            "client_id": "467012019057-raant1fk0n1kk06fmm2fiktjcgnffvqm.apps.googleusercontent.com",
+                            "client_type": 3
+                        }
+                    ]
+                }
+            }
+        }
+    ],
+    "configuration_version": "1"
+}
