@@ -14,7 +14,7 @@ router.get('/student/current', verifyAuth, async (req, res) => {
         }
         
         // Populate current occupants
-        const room = await Room.findById(user.room_id._id)
+        const room = await Room.findById(user.room_id)
             .populate('current_occupants', 'name _id');
         
         res.json({ 

@@ -121,13 +121,17 @@ export function StudentOnboardingForm({ hostelId, onComplete }: StudentOnboardin
         role: "student",
         hostel_id: hostelId,
         registration_number: regNumber,
-        room_id: typedRoomNumber,
+        room_id: typedRoomNumber.toUpperCase(),
         block: selectedBlock
       });
 
       const data = await response.json();
 
       if (response.ok) {
+        localStorage.setItem("user", JSON.stringify(data.user));
+        if (data.token) {
+          localStorage.setItem("token", data.token);
+        }
         toast.success("Registration complete!");
         onComplete();
       } else {
