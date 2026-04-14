@@ -7,6 +7,7 @@ import { Label } from "./ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
 import { GoogleAuthProvider, signInWithCredential, signInWithPopup, signInWithRedirect, getRedirectResult } from "firebase/auth";
 import { GoogleAuth } from "@codetrix-studio/capacitor-google-auth";
+import { Capacitor } from "@capacitor/core";
 import { googleProvider, auth } from "../config/firebase.config";
 import { toast } from "sonner";
 import { apiClient } from "../utils/apiClient";
@@ -127,38 +128,65 @@ export function RoleSelectionLogin({ onLogin, onSignupComplete }: RoleSelectionL
     }
     
     setIsLoading(true);
+    setErrorMsg("");
+    
     try {
-      let user: any;
-
-      try {
-        // 1. Try Native Google Auth (Capacitor)
-        const googleUser = await GoogleAuth.signIn();
-        const idToken = googleUser.authentication.idToken;
-        const credential = GoogleAuthProvider.credential(idToken);
-        const result = await signInWithCredential(auth, credential);
-        user = result.user;
-      } catch (nativeError) {
-        console.log("Native Google Login failed/unavailable, trying popup:", nativeError);
+      const isNative = Capacitor.isNativePlatform();
+      
+      if (isNative) {
+        // ===== NATIVE ANDROID/iOS: Use Capacitor GoogleAuth plugin only =====
         try {
-          // 2. Try Web Popup
+          const googleUser = await GoogleAuth.signIn();
+          
+          // Try to get Firebase credential for consistency
+          try {
+            const idToken = googleUser.authentication.idToken;
+            const credential = GoogleAuthProvider.credential(idToken);
+            const result = await signInWithCredential(auth, credential);
+            await handleBackendAuth(result.user);
+          } catch (firebaseErr) {
+            // Firebase credential failed — send Google user data directly to backend
+            console.log("Firebase credential skipped, syncing directly:", firebaseErr);
+            const response = await apiClient.post("/api/auth/google", {
+              email: googleUser.email,
+              name: googleUser.name || googleUser.givenName || googleUser.email?.split('@')[0],
+              firebase_uid: googleUser.id,
+              role: selectedRole
+            });
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.error || "Backend sync failed");
+            
+            if (data.token) localStorage.setItem("token", data.token);
+            if (data.user) localStorage.setItem("user", JSON.stringify(data.user));
+            
+            if (data.user?.hostel_id) {
+              onLogin(data.user.role);
+            } else {
+              onSignupComplete(data.user.role, true);
+            }
+          }
+        } catch (nativeError: any) {
+          console.error("Native Google Auth failed:", nativeError);
+          throw new Error("Google Sign-In failed. Please ensure Google Play Services is available and try again.");
+        }
+      } else {
+        // ===== WEB: Use Firebase popup, fallback to redirect =====
+        try {
           const result = await signInWithPopup(auth, googleProvider);
-          user = result.user;
+          await handleBackendAuth(result.user);
         } catch (popupError: any) {
-          if (popupError.code === 'auth/popup-blocked' || popupError.code === 'auth/operation-not-allowed') {
-            console.log("Popup blocked or not allowed, falling back to redirect...");
-            // 3. Final Fallback: Redirect
+          if (popupError.code === 'auth/popup-blocked') {
+            toast.warning("Popup blocked — trying redirect...");
             await signInWithRedirect(auth, googleProvider);
-            return; // Exit and wait for redirect result on reload
+            return;
           }
           throw popupError;
         }
       }
-
-      if (user) await handleBackendAuth(user);
     } catch (error: any) {
       console.error("Google Login error:", error);
-      setErrorMsg("Google Login failed: " + (error.message || "Unknown error"));
-      toast.error("Google Login failed");
+      setErrorMsg(error.message || "Google Login failed");
+      toast.error(error.message || "Google Login failed");
     } finally {
       setIsLoading(false);
     }
