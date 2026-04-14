@@ -1,10 +1,10 @@
-import { API_URL } from "../config/api.config";
 import { useState, useEffect } from "react";
 import { ArrowLeft, Home, Users, Bed, DoorOpen, Wifi, Fan, Lightbulb, Bell, CheckCircle } from "lucide-react";
 import { Card, CardContent } from "./ui/card";
 import { Badge } from "./ui/badge";
 import { toast } from "sonner";
 import { auth } from "../config/firebase.config";
+import { apiClient } from "../utils/apiClient";
 
 interface RoomDetailsProps {
   onBack: () => void;
@@ -16,30 +16,20 @@ export function RoomDetails({ onBack, onNavigateToComplaints }: RoomDetailsProps
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // 1. Get token
-    // 2. Refresh Sync to get User Data (and their room_id)
-    // 3. Fetch Room Detail
     const loadRoomData = async () => {
       try {
-        const user = auth.currentUser;
-        if (!user) {
-          setIsLoading(false);
-          return;
-        }
-        
-        const idToken = await user.getIdToken();
-        const syncRes = await fetch(`${API_URL}/api/auth/sync`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ idToken })
-        });
-        
-        const syncData = await syncRes.json();
-        
-        if (syncData.user?.room_id) {
-            const roomRes = await fetch(`${API_URL}/api/rooms/detail/${syncData.user.room_id}`);
-            const roomData = await roomRes.json();
-            setRoomInfo(roomData);
+        // Fetch current student's room assignment via session
+        const res = await apiClient.get('/api/rooms/student/current');
+        if (res.ok) {
+            const data = await res.json();
+            // Fetch the full room detail using the ID from the assignment
+            if (data.room?._id) {
+                const roomRes = await apiClient.get(`/api/rooms/detail/${data.room._id}`);
+                if (roomRes.ok) {
+                    const roomData = await roomRes.json();
+                    setRoomInfo(roomData);
+                }
+            }
         }
       } catch (error) {
         toast.error("Failed to load room details");

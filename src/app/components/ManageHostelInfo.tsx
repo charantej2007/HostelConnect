@@ -1,4 +1,3 @@
-import { API_URL } from "../config/api.config";
 import { ArrowLeft, Plus, Building2, Pencil, Trash2, Phone, MessageCircle, User } from "lucide-react";
 import { Card, CardContent } from "./ui/card";
 import { Button } from "./ui/button";
@@ -9,6 +8,7 @@ import { Label } from "./ui/label";
 import { Checkbox } from "./ui/checkbox";
 import { toast } from "sonner";
 import { auth } from "../config/firebase.config";
+import { apiClient } from "../utils/apiClient";
 
 interface ManageHostelInfoProps {
   onBack: () => void;
@@ -35,22 +35,16 @@ export function ManageHostelInfo({ onBack }: ManageHostelInfoProps) {
   useEffect(() => {
     const fetchHostelData = async () => {
       try {
-        const uid = auth.currentUser?.uid;
-        if (!uid) {
-            setIsLoading(false);
-            return;
-        }
-        
-        // Fetch hostel details (including name and blocks)
-        const response = await fetch(`${API_URL}/api/hostels/admin-info/${uid}`);
+        // Fetch hostel details via session
+        const response = await apiClient.get('/api/auth/me');
+        if (!response.ok) return;
         const data = await response.json();
+        const hostel = data.user?.hostel_id;
         
-        if (response.ok) {
-          setInstitutionName(data.hostel?.institution_name || "");
-          setNewName(data.hostel?.institution_name || "");
-          setBlocks(data.hostel?.blocks || []);
-        } else {
-          toast.error(data.error || "Failed to fetch hostel data");
+        if (hostel) {
+          setInstitutionName(hostel.institution_name || "");
+          setNewName(hostel.institution_name || "");
+          setBlocks(hostel.blocks || []);
         }
       } catch (error) {
         toast.error("Network error");
@@ -97,15 +91,11 @@ export function ManageHostelInfo({ onBack }: ManageHostelInfoProps) {
 
   const saveBlocksToServer = async (updatedBlocks: HostelBlock[]) => {
     try {
-      const uid = auth.currentUser?.uid;
-      if (!uid) return false;
-      const response = await fetch(`${API_URL}/api/hostels/admin/${uid}/blocks`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ blocks: updatedBlocks }),
+      const response = await apiClient.put(`/api/hostels/admin/current/blocks`, { 
+        blocks: updatedBlocks 
       });
-      const data = await response.json();
       if (!response.ok) {
+        const data = await response.json();
         toast.error(data.error || "Failed to save to database");
         return false;
       }
@@ -169,21 +159,16 @@ export function ManageHostelInfo({ onBack }: ManageHostelInfoProps) {
     }
 
     try {
-      const uid = auth.currentUser?.uid;
-      if (!uid) return;
-
-      const response = await fetch(`${API_URL}/api/hostels/admin/${uid}/name`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ institution_name: newName }),
+      const response = await apiClient.put(`/api/hostels/admin/current/name`, { 
+        institution_name: newName 
       });
 
-      const data = await response.json();
       if (response.ok) {
         setInstitutionName(newName);
         setIsEditingName(false);
         toast.success("Institution name updated!");
       } else {
+        const data = await response.json();
         toast.error(data.error || "Failed to update name");
       }
     } catch (error) {

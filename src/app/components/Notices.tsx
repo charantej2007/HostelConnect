@@ -2,8 +2,8 @@ import { ArrowLeft, Bell, Calendar, Pin, Download, ExternalLink } from "lucide-r
 import { Card, CardContent } from "./ui/card";
 import { Badge } from "./ui/badge";
 import { useState, useEffect } from "react";
-import { API_URL } from "../config/api.config";
 import { auth } from "../config/firebase.config";
+import { apiClient } from "../utils/apiClient";
 
 interface NoticesProps {
   onBack: () => void;
@@ -32,17 +32,15 @@ export function Notices({ onBack }: NoticesProps) {
   useEffect(() => {
     const fetchNotices = async () => {
       try {
-        const uid = auth.currentUser?.uid;
-        if (!uid) return;
-
-        // 1. Get user/hostel info
-        const userRes = await fetch(`${API_URL}/api/auth/user/${uid}`);
+        // 1. Get user/hostel info from session
+        const userRes = await apiClient.get('/api/auth/me');
         if (!userRes.ok) return;
         const userData = await userRes.json();
-        const hostelId = userData.hostel._id;
+        const hostelId = userData.user?.hostel_id?._id || userData.user?.hostel_id;
+        if (!hostelId) return;
 
         // 2. Fetch announcements
-        const res = await fetch(`${API_URL}/api/announcements/hostel/${hostelId}`);
+        const res = await apiClient.get(`/api/announcements/hostel/${hostelId}`);
         if (res.ok) {
           const data = await res.json();
           setNotices(data);

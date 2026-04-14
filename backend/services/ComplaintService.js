@@ -60,15 +60,11 @@ class ComplaintService {
     }
 
     // 3. Accept Complaint (Worker claiming from queue)
-    static async acceptComplaint(complaint_id, worker_uid) {
-        const User = require('../models/User');
-        const worker = await User.findOne({ firebase_uid: worker_uid });
-        if (!worker) throw new Error('Worker not found');
-
+    static async acceptComplaint(complaint_id, worker_id) {
         const complaint = await Complaint.findByIdAndUpdate(
             complaint_id,
             { 
-                worker_id: worker._id, 
+                worker_id: new mongoose.Types.ObjectId(worker_id), 
                 status: 'In Progress' 
             },
             { new: true }

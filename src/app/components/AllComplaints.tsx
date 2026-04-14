@@ -1,9 +1,9 @@
-import { API_URL } from "../config/api.config";
 import { useState, useEffect } from "react";
 import { ArrowLeft, Filter } from "lucide-react";
 import { ComplaintCard, Complaint } from "./ComplaintCard";
 import { Tabs, TabsList, TabsTrigger } from "./ui/tabs";
 import { auth } from "../config/firebase.config";
+import { apiClient } from "../utils/apiClient";
 
 interface AllComplaintsProps {
   onBack: () => void;
@@ -19,23 +19,22 @@ export function AllComplaints({ onBack, onComplaintClick, userRole }: AllComplai
   useEffect(() => {
     const fetchComplaints = async () => {
       try {
-        const uid = auth.currentUser?.uid;
-        if (!uid) return;
-
-        const userRes = await fetch(`${API_URL}/api/auth/user/${uid}`);
-        if (!userRes.ok) return;
-        const data = await userRes.json();
-        const hostelId = data.hostel?._id || data.user?.hostel_id || data.hostel;
+        const meRes = await apiClient.get('/api/auth/me');
+        if (!meRes.ok) return;
+        const meData = await meRes.json();
+        const user = meData.user;
+        const hostelId = user?.hostel_id?._id || user?.hostel_id;
+        
         if (!hostelId) {
-            console.error("AllComplaints: No hostel ID found for user:", data.user);
+            console.error("AllComplaints: No hostel ID found for user:", user);
             return;
         }
 
-        const cmpRes = await fetch(`${API_URL}/api/complaints/${hostelId}`);
+        const cmpRes = await apiClient.get(`/api/complaints/${hostelId}`);
         if (!cmpRes.ok) return;
 
         const cmpData = await cmpRes.json();
-        const currentUserId = String(data.user._id);
+        const currentUserId = String(user._id);
 
         // Filter: Staff only see their own assigned complaints; Admins see all
         const filteredData = userRole === "worker"

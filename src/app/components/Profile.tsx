@@ -1,4 +1,3 @@
-import { API_URL } from "../config/api.config";
 import { User, Mail, Phone, MapPin, Building2, Calendar, LogOut, Key, Pencil, Save, X, Copy } from "lucide-react";
 import { Card, CardContent } from "./ui/card";
 import { Button } from "./ui/button";
@@ -9,6 +8,7 @@ import { toast } from "sonner";
 import { useState, useEffect } from "react";
 import { auth } from "../config/firebase.config";
 import { signOut } from "firebase/auth";
+import { apiClient } from "../utils/apiClient";
 
 interface ProfileProps {
   onBack: () => void;
@@ -28,27 +28,28 @@ export function Profile({ onBack, onLogout, userRole }: ProfileProps) {
 
   useEffect(() => {
     const fetchProfile = async () => {
-      const uid = auth.currentUser?.uid;
-      if (!uid) return;
-
       try {
-        const res = await fetch(`${API_URL}/api/auth/user/${uid}`);
+        const res = await apiClient.get('/api/auth/me');
         if (!res.ok) return;
         const data = await res.json();
-        setUserData(data.user);
-        setHostelData(data.hostel);
-        setEditName(data.user?.name || "");
-        setEditPhone(data.user?.phone_number || "");
+        const user = data.user;
+        const hostel = user.hostel_id; 
+        
+        setUserData(user);
+        setHostelData(hostel);
+        setEditName(user?.name || "");
+        setEditPhone(user?.phone_number || "");
 
-        // For students, fetch room info
+        // For students, fetch room info using the session-based route
         if (userRole === "student") {
-          const roomRes = await fetch(`${API_URL}/api/rooms/student/${uid}`);
+          const roomRes = await apiClient.get('/api/rooms/student/current');
           if (roomRes.ok) {
             const roomInfo = await roomRes.json();
             setRoomData(roomInfo.room);
             // Fetch complaint stats
-            if (roomInfo.hostel?._id && data.user?._id) {
-              const cmpRes = await fetch(`${API_URL}/api/complaints/${roomInfo.hostel._id}?student_id=${data.user._id}`);
+            const hId = roomInfo.hostel?._id || user.hostel_id;
+            if (hId && user?._id) {
+              const cmpRes = await apiClient.get(`/api/complaints/${hId}?student_id=${user._id}`);
               if (cmpRes.ok) {
                 const cmps = await cmpRes.json();
                 setComplaintStats({
@@ -62,11 +63,15 @@ export function Profile({ onBack, onLogout, userRole }: ProfileProps) {
         }
 
         // For workers, fetch their complaint task stats
-        if (userRole === "worker" && data.hostel?._id) {
-          const cmpRes = await fetch(`${API_URL}/api/complaints/${data.hostel._id}`);
+        if (userRole === "worker" && (hostel?._id || user.hostel_id)) {
+          const hId = hostel?._id || user.hostel_id;
+          const cmpRes = await apiClient.get(`/api/complaints/${hId}`);
           if (cmpRes.ok) {
             const cmps = await cmpRes.json();
-            const mine = cmps.filter((c: any) => c.worker_id?._id === data.user._id || c.worker_id === data.user._id);
+            const mine = cmps.filter((c: any) => {
+                const assignedId = typeof c.worker_id === "string" ? c.worker_id : String(c.worker_id?._id);
+                return assignedId === String(user._id);
+            });
             setComplaintStats({
               total: mine.length,
               pending: mine.filter((c: any) => c.status === "Pending").length,
@@ -82,18 +87,16 @@ export function Profile({ onBack, onLogout, userRole }: ProfileProps) {
   }, [userRole]);
 
   const handleSave = async () => {
-    const uid = auth.currentUser?.uid;
-    if (!uid) return;
     setIsSaving(true);
     try {
-      const res = await fetch(`${API_URL}/api/auth/user/${uid}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: editName, phone_number: editPhone }),
+      const res = await apiClient.put(`/api/auth/user/current`, { 
+        name: editName, 
+        phone_number: editPhone 
       });
       if (res.ok) {
         const data = await res.json();
         setUserData(data.user);
+        localStorage.setItem("user", JSON.stringify(data.user));
         setIsEditMode(false);
         toast.success("Profile updated successfully!");
       } else {
@@ -107,7 +110,10 @@ export function Profile({ onBack, onLogout, userRole }: ProfileProps) {
   };
 
   const handleLogout = async () => {
-    await signOut(auth);
+    try {
+      await signOut(auth);
+    } catch (e) {}
+    localStorage.clear();
     onLogout?.();
   };
 

@@ -1,4 +1,3 @@
-import { API_URL } from "./config/api.config";
 import { useState, useEffect } from "react";
 import { SplashScreen } from "./components/SplashScreen";
 import { RoleSelectionLogin } from "./components/RoleSelectionLogin";
@@ -26,6 +25,7 @@ import { Toaster } from "./components/ui/sonner";
 import { toast } from "sonner";
 import { auth } from "./config/firebase.config";
 import { signOut } from "firebase/auth";
+import { apiClient } from "./utils/apiClient";
 
 type Screen =
   | "splash"
@@ -58,11 +58,47 @@ export default function App() {
   const [activeTab, setActiveTab] = useState("dashboard");
   const [activeHostelId, setActiveHostelId] = useState<string | null>(null);
 
+  useEffect(() => {
+    // 1. Check for existing session in localStorage
+    const savedUser = localStorage.getItem("user");
+    const savedToken = localStorage.getItem("token");
+
+    if (savedUser && savedToken) {
+      try {
+        const user = JSON.parse(savedUser);
+        setUserRole(user.role);
+        setActiveHostelId(user.hostel_id?._id || user.hostel_id);
+        setCurrentScreen("dashboard");
+        setActiveTab("dashboard");
+      } catch (e) {
+        console.error("Failed to parse saved user", e);
+        localStorage.clear();
+      }
+    }
+
+    // 2. Listen to Firebase (for Google users)
+    const unsubscribe = auth.onAuthStateChanged((fbUser) => {
+      // If we are on the login screen and a firebase user appears, 
+      // the RoleSelectionLogin component will handle the sync.
+      if (fbUser && currentScreen === "splash") {
+        // Just let splash finish
+      }
+    });
+    return () => unsubscribe();
+  }, []);
+
   const handleSplashComplete = () => {
-    setCurrentScreen("login");
+    // If already logged in (via useEffect), don't go to login
+    const savedToken = localStorage.getItem("token");
+    if (savedToken && userRole) {
+      setCurrentScreen("dashboard");
+    } else {
+      setCurrentScreen("login");
+    }
   };
 
   const handleLogin = (role: Role) => {
+    // User data is already saved to localStorage by RoleSelectionLogin
     setUserRole(role);
     setCurrentScreen("dashboard");
     setActiveTab("dashboard");
@@ -73,12 +109,9 @@ export default function App() {
 
     if (role === "admin" && isFirstTime) {
       setCurrentScreen("admin-setup");
-    } else if (role === "student" && isFirstTime) {
-      // Go directly to onboarding instead of verification
-      // We'll need to handle the missing hostelId in onboarding form
-      setCurrentScreen("student-onboarding");
-      // Set a dummy or default hostel ID if none exists yet, or let user pick/enter it in onboarding
-      setActiveHostelId("default"); 
+    } else if ((role === "student" || role === "worker") && isFirstTime) {
+      // Send to code verification first — they need a hostel code to join
+      setCurrentScreen("code-verification");
     } else {
       setCurrentScreen("dashboard");
       setActiveTab("dashboard");
@@ -95,22 +128,16 @@ export default function App() {
     if (userRole === "student") {
       setCurrentScreen("student-onboarding");
     } else {
-      // Register worker to MongoDB automatically
+      // Register worker to MongoDB automatically using unified API client
       try {
-        const currentUser = auth.currentUser;
-        if (currentUser) {
-          await fetch(`${API_URL}/api/auth/complete-onboarding`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              name: currentUser.displayName || currentUser.email?.split('@')[0] || "Worker",
-              email: currentUser.email || "",
-              phone: currentUser.phoneNumber || "",
-              firebase_uid: currentUser.uid,
-              role: "worker",
-              hostel_id: hostelId,
-            })
-          });
+        const response = await apiClient.post("/api/auth/complete-onboarding", {
+          role: "worker",
+          hostel_id: hostelId,
+        });
+        
+        if (response.ok) {
+           const data = await response.json();
+           localStorage.setItem("user", JSON.stringify(data.user));
         }
       } catch (err) {
         console.error("Worker registration error", err);
@@ -124,8 +151,9 @@ export default function App() {
     try {
       await signOut(auth);
     } catch (e) {
-      // Ignore signout errors
+      // Ignore
     }
+    localStorage.clear();
     setCurrentScreen("login");
     setUserRole(null);
     setActiveHostelId(null);

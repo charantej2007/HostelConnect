@@ -9,8 +9,8 @@ import { Checkbox } from "./ui/checkbox";
 import { Paperclip, X, Send, Loader2 } from "lucide-react";
 import { storage, auth } from "../config/firebase.config";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import { API_URL } from "../config/api.config";
 import { toast } from "sonner";
+import { apiClient } from "../utils/apiClient";
 
 interface AnnouncementModalProps {
   isOpen: boolean;
@@ -44,12 +44,13 @@ export function AnnouncementModal({ isOpen, onClose, hostelId }: AnnouncementMod
 
     setIsSubmitting(true);
     try {
-      const uid = auth.currentUser?.uid;
-      const adminRes = await fetch(`${API_URL}/api/auth/user/${uid}`);
-      const adminData = await adminRes.json();
-      const adminId = adminData.user._id;
+      // 1. Get current admin from session
+      const meRes = await apiClient.get('/api/auth/me');
+      if (!meRes.ok) throw new Error("Could not verify session");
+      const meData = await meRes.json();
+      const adminId = meData.user._id;
 
-      // 1. Upload files to Firebase Storage
+      // 2. Upload files to Firebase Storage
       const attachmentUrls: string[] = [];
       for (const file of files) {
         const fileRef = ref(storage, `announcements/${hostelId}/${Date.now()}_${file.name}`);
@@ -58,11 +59,8 @@ export function AnnouncementModal({ isOpen, onClose, hostelId }: AnnouncementMod
         attachmentUrls.push(url);
       }
 
-      // 2. Save announcement to MongoDB
-      const res = await fetch(`${API_URL}/api/announcements`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+      // 3. Save announcement to MongoDB via apiClient
+      const res = await apiClient.post("/api/announcements", {
           admin_id: adminId,
           hostel_id: hostelId,
           title,
@@ -70,7 +68,6 @@ export function AnnouncementModal({ isOpen, onClose, hostelId }: AnnouncementMod
           priority,
           pinned,
           attachments: attachmentUrls
-        })
       });
 
       if (res.ok) {
@@ -82,11 +79,12 @@ export function AnnouncementModal({ isOpen, onClose, hostelId }: AnnouncementMod
         setPinned(false);
         onClose();
       } else {
-        throw new Error("Failed to save announcement");
+        const data = await res.json();
+        throw new Error(data.error || "Failed to save announcement");
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error(error);
-      toast.error("An error occurred while sending the announcement.");
+      toast.error(error.message || "An error occurred while sending the announcement.");
     } finally {
       setIsSubmitting(false);
     }

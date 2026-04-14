@@ -1,4 +1,3 @@
-import { API_URL } from "../config/api.config";
 import { useState, useEffect } from "react";
 import { User, Phone, CheckCircle, Hash, Building, DoorOpen } from "lucide-react";
 import { Card, CardContent } from "./ui/card";
@@ -7,6 +6,7 @@ import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { toast } from "sonner";
 import { auth } from "../config/firebase.config";
+import { apiClient } from "../utils/apiClient";
 
 interface Room {
   id: string;
@@ -45,16 +45,29 @@ export function StudentOnboardingForm({ hostelId, onComplete }: StudentOnboardin
   const selectedRoom = allRooms.find(r => r.block === selectedBlock && r.room_number.toUpperCase() === typedRoomNumber.toUpperCase());
 
   useEffect(() => {
-    // Attempt to pre-fill name and email from Firebase if available
+    // Pre-fill name from Firebase or localStorage
     const currentUser = auth.currentUser;
     if (currentUser?.displayName) {
       setName(currentUser.displayName);
+    } else {
+      const savedUser = localStorage.getItem("user");
+      if (savedUser) {
+        try {
+          const parsed = JSON.parse(savedUser);
+          if (parsed.name) setName(parsed.name);
+        } catch (e) {}
+      }
     }
     
     // Fetch available rooms
     const fetchRooms = async () => {
+      if (!hostelId || hostelId === 'default') {
+        setIsFetchingRooms(false);
+        return;
+      }
+      
       try {
-        const response = await fetch(`${API_URL}/api/rooms/${hostelId}`);
+        const response = await apiClient.get(`/api/rooms/${hostelId}`);
         const data = await response.json();
         if (response.ok) {
           setBlocks(data.blocks || []);
@@ -90,21 +103,26 @@ export function StudentOnboardingForm({ hostelId, onComplete }: StudentOnboardin
     setIsLoading(true);
     const currentUser = auth.currentUser;
     
+    // Get email from Firebase or localStorage
+    let userEmail = currentUser?.email || "";
+    if (!userEmail) {
+      const savedUser = localStorage.getItem("user");
+      if (savedUser) {
+        try { userEmail = JSON.parse(savedUser).email || ""; } catch (e) {}
+      }
+    }
+    
     try {
-      const response = await fetch(`${API_URL}/api/auth/complete-onboarding`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name,
-          email: currentUser?.email || "",
-          phone,
-          firebase_uid: currentUser?.uid,
-          role: "student",
-          hostel_id: hostelId,
-          registration_number: regNumber,
-          room_id: typedRoomNumber,
-          block: selectedBlock
-        })
+      const response = await apiClient.post("/api/auth/complete-onboarding", {
+        name,
+        email: userEmail,
+        phone,
+        firebase_uid: currentUser?.uid,
+        role: "student",
+        hostel_id: hostelId,
+        registration_number: regNumber,
+        room_id: typedRoomNumber,
+        block: selectedBlock
       });
 
       const data = await response.json();

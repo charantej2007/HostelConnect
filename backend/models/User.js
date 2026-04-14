@@ -8,10 +8,17 @@ const userSchema = new mongoose.Schema({
   room_id: { type: mongoose.Schema.Types.ObjectId, ref: 'Room' },
   registration_number: { type: String },
   phone_number: String,
-  password_hash: String, // Added for database user validation
-  firebase_uid: { type: String, unique: true }, // For Google Auth association
+  password_hash: String,
+  firebase_uid: { type: String, unique: true, sparse: true },
   profile_pic: String,
   created_at: { type: Date, default: Date.now }
 });
+
+// Never send password_hash to the frontend
+userSchema.methods.toJSON = function() {
+  const obj = this.toObject();
+  delete obj.password_hash;
+  return obj;
+};
 
 module.exports = mongoose.model('User', userSchema);

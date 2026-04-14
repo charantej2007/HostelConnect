@@ -1,8 +1,8 @@
-import { API_URL } from "../config/api.config";
 import { useState, useEffect } from "react";
 import { ArrowLeft, Building2, Phone, MessageCircle, User, Wifi, Utensils, Dumbbell, BookOpen, Shield, Camera } from "lucide-react";
 import { Card, CardContent } from "./ui/card";
 import { auth } from "../config/firebase.config";
+import { apiClient } from "../utils/apiClient";
 
 interface HostelInfoProps {
   onBack: () => void;
@@ -21,30 +21,24 @@ export function HostelInfo({ onBack }: HostelInfoProps) {
   useEffect(() => {
     const fetchHostelInfo = async () => {
       try {
-        const uid = auth.currentUser?.uid;
-        if (!uid) return;
-
-        // Step 1: Get the hostel_id for this user (works for student, worker, admin)
         let hostelId: string | null = null;
 
-        // Try student room lookup first
-        const roomRes = await fetch(`${API_URL}/api/rooms/student/${uid}`);
+        // Try student room lookup first via session
+        const roomRes = await apiClient.get('/api/rooms/student/current');
         if (roomRes.ok) {
           const data = await roomRes.json();
           hostelId = data.hostel?._id || null;
-          // If from room lookup, we already have the block
           if (data.room?.block) {
             setUserBlock(data.room.block);
           }
         }
 
-        // If not a student, get via user record
+        // If not a student or not assigned, get via session user record
         if (!hostelId) {
-          const userRes = await fetch(`${API_URL}/api/auth/user/${uid}`);
-          if (userRes.ok) {
-            const data = await userRes.json();
-            hostelId = data.hostel?._id || data.user?.hostel_id || null;
-            // Also try to get block from room lookup in user record if populated
+          const meRes = await apiClient.get('/api/auth/me');
+          if (meRes.ok) {
+            const data = await meRes.json();
+            hostelId = data.user?.hostel_id?._id || data.user?.hostel_id || null;
             if (data.user?.room_id?.block) {
                 setUserBlock(data.user.room_id.block);
             }
@@ -53,8 +47,8 @@ export function HostelInfo({ onBack }: HostelInfoProps) {
 
         if (!hostelId) { setLoading(false); return; }
 
-        // Step 2: Fetch full hostel details including blocks
-        const hostelRes = await fetch(`${API_URL}/api/hostels/${hostelId}/info`);
+        // Fetch full hostel details including blocks
+        const hostelRes = await apiClient.get(`/api/hostels/${hostelId}/info`);
         if (hostelRes.ok) {
           const data = await hostelRes.json();
           setHostel(data.hostel);

@@ -1,9 +1,9 @@
-import { API_URL } from "../config/api.config";
 import { motion } from "motion/react";
-import { FileText, AlertCircle, Users, Clock, ArrowLeft } from "lucide-react";
+import { FileText, AlertCircle, Users, Clock, ArrowLeft, CheckCircle } from "lucide-react";
 import { Card, CardContent } from "./ui/card";
 import { useState, useEffect } from "react";
 import { auth } from "../config/firebase.config";
+import { apiClient } from "../utils/apiClient";
 
 interface AdminAnalyticsProps {
   onBack: () => void;
@@ -15,15 +15,15 @@ export function AdminAnalytics({ onBack }: AdminAnalyticsProps) {
   useEffect(() => {
     const fetchAdminData = async () => {
       try {
-        const uid = auth.currentUser?.uid;
-        if (!uid) return;
+        const res = await apiClient.get('/api/auth/me');
+        if (!res.ok) return;
+        const data = await res.json();
+        const hostelId = data.user?.hostel_id?._id || data.user?.hostel_id;
         
-        const infoRes = await fetch(`${API_URL}/api/hostels/admin-info/${uid}`);
-        if (!infoRes.ok) return;
-        const info = await infoRes.json();
-        
-        const statsRes = await fetch(`${API_URL}/api/hostels/${info.hostel._id}/stats`);
-        if (statsRes.ok) setStatsData(await statsRes.json());
+        if (hostelId) {
+            const statsRes = await apiClient.get(`/api/hostels/${hostelId}/stats`);
+            if (statsRes.ok) setStatsData(await statsRes.json());
+        }
       } catch (e) {
         console.error("Failed to load admin stats");
       }

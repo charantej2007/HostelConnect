@@ -1,55 +1,67 @@
 const express = require('express');
 const router = express.Router();
 const AuthService = require('../services/AuthService');
-const OTPService = require('../services/OTPService');
-const User = require('../models/User');
-const admin = require('firebase-admin');
+const verifyAuth = require('../middleware/auth');
 
-// POST /api/auth/verify-and-sync
-// Logic: Verifies Firebase ID Token and finds/creates the user record in MongoDB.
-router.post('/sync', async (req, res) => {
-    try {
-        const { idToken, role, password } = req.body;
-        const decodedToken = await AuthService.verifyToken(idToken);
-        const user = await AuthService.syncUser(decodedToken, role, password);
-        
-        if (!user || !user.hostel_id) {
-            return res.status(200).json({ 
-                needsOnboarding: true, 
-                decodedToken,
-                user
-            });
-        }
-        
-        res.json({ user });
-    } catch (error) {
-        res.status(401).json({ error: error.message });
-    }
-});
-
-// POST /api/auth/register (Native MongoDB)
+/**
+ * POST /api/auth/register
+ * Method: Email/Password Signup
+ */
 router.post('/register', async (req, res) => {
     try {
         const { name, email, password, role } = req.body;
+        console.log(`[Auth] Registration attempt: ${email}`);
         const result = await AuthService.signup({ name, email, password, role });
         res.status(201).json(result);
     } catch (error) {
+        console.error(`[Auth Error] Registration: ${error.message}`);
         res.status(400).json({ error: error.message });
     }
 });
 
-// POST /api/auth/login (Native MongoDB)
+/**
+ * POST /api/auth/login
+ * Method: Email/Password Login
+ */
 router.post('/login', async (req, res) => {
     try {
         const { email, password } = req.body;
+        console.log(`[Auth] Login attempt: ${email}`);
         const result = await AuthService.login(email, password);
         res.json(result);
     } catch (error) {
+        console.error(`[Auth Error] Login: ${error.message}`);
         res.status(401).json({ error: error.message });
     }
 });
 
-// POST /api/auth/admin-signup
+/**
+ * POST /api/auth/google
+ * Method: Firebase Google Auth Sync
+ */
+router.post('/google', async (req, res) => {
+    try {
+        const { email, name, firebase_uid, role } = req.body;
+        console.log(`[Auth] Google Sync attempt: ${email}`);
+        const result = await AuthService.googleAuth({ email, name, firebase_uid, role });
+        res.json(result);
+    } catch (error) {
+        console.error(`[Auth Error] Google Sync: ${error.message}`);
+        res.status(400).json({ error: error.message });
+    }
+});
+
+/**
+ * GET /api/auth/me
+ * Method: Get current user profile (using JWT)
+ */
+router.get('/me', verifyAuth, async (req, res) => {
+    res.json({ user: req.user });
+});
+
+/**
+ * POST /api/auth/admin-signup
+ */
 router.post('/admin-signup', async (req, res) => {
     try {
         const { institutionName, adminName, email, phone, firebase_uid, maxRooms } = req.body;
@@ -62,7 +74,9 @@ router.post('/admin-signup', async (req, res) => {
     }
 });
 
-// POST /api/auth/verify-code
+/**
+ * POST /api/auth/verify-code
+ */
 router.post('/verify-code', async (req, res) => {
     try {
         const { code, role } = req.body;
@@ -70,13 +84,19 @@ router.post('/verify-code', async (req, res) => {
         if (!hostel) {
             return res.status(400).json({ error: `Invalid Join Code for ${role} role` });
         }
-        res.status(200).json({ message: "Code verified", hostel_id: hostel._id, hostel_name: hostel.institution_name });
+        res.status(200).json({ 
+            message: "Code verified", 
+            hostel_id: hostel._id, 
+            hostel_name: hostel.institution_name 
+        });
     } catch (error) {
         res.status(400).json({ error: error.message });
     }
 });
 
-// POST /api/auth/complete-onboarding
+/**
+ * POST /api/auth/complete-onboarding
+ */
 router.post('/complete-onboarding', async (req, res) => {
     try {
         const { name, email, phone, firebase_uid, role, hostel_id, registration_number, room_id, block } = req.body;
@@ -89,85 +109,20 @@ router.post('/complete-onboarding', async (req, res) => {
     }
 });
 
-// GET /api/auth/user/:uid
-router.get('/user/:uid', async (req, res) => {
+/**
+ * PUT /api/auth/user/current
+ * Method: Update current user's profile
+ */
+router.put('/user/current', verifyAuth, async (req, res) => {
     try {
-        const User = require('../models/User');
-        const user = await User.findOne({ firebase_uid: req.params.uid }).populate('hostel_id').populate('room_id');
-        if (!user) return res.status(404).json({ error: 'User not found' });
-        res.json({ user, hostel: user.hostel_id });
-    } catch (error) {
-        res.status(400).json({ error: error.message });
-    }
-});
-
-// PUT /api/auth/user/:uid  - Update profile
-router.put('/user/:uid', async (req, res) => {
-    try {
-        const User = require('../models/User');
         const { name, phone_number } = req.body;
-        const user = await User.findOneAndUpdate(
-            { firebase_uid: req.params.uid },
+        const User = require('../models/User');
+        const user = await User.findByIdAndUpdate(
+            req.user._id, 
             { ...(name && { name }), ...(phone_number && { phone_number }) },
             { new: true }
-        );
-        if (!user) return res.status(404).json({ error: 'User not found' });
+        ).populate('hostel_id');
         res.json({ user });
-    } catch (error) {
-        res.status(400).json({ error: error.message });
-    }
-});
-
-// POST /api/auth/send-otp
-router.post('/send-otp', async (req, res) => {
-    try {
-        const { email, purpose } = req.body;
-        if (!email || !purpose) return res.status(400).json({ error: 'Email and purpose are required' });
-        
-        await OTPService.generateOTP(email, purpose);
-        res.json({ message: `OTP sent successfully to ${email}` });
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
-});
-
-// POST /api/auth/verify-otp
-router.post('/verify-otp', async (req, res) => {
-    try {
-        const { email, otp, purpose } = req.body;
-        if (!email || !otp || !purpose) return res.status(400).json({ error: 'Email, OTP, and purpose are required' });
-        
-        await OTPService.verifyOTP(email, otp, purpose);
-        res.json({ message: 'OTP verified successfully' });
-    } catch (error) {
-        res.status(400).json({ error: error.message });
-    }
-});
-
-// POST /api/auth/reset-password
-router.post('/reset-password', async (req, res) => {
-    try {
-        const { email, newPassword, otp } = req.body;
-        if (!email || !newPassword || !otp) return res.status(400).json({ error: 'Email, new password, and OTP are required' });
-
-        try {
-            await OTPService.verifyOTP(email, otp, 'forgot-password');
-        } catch (error) {
-            // If verification fails here, it might be because the user already verified it in the previous UI step.
-            // In a production environment with stateful UI, we should Ideally issue a temporal reset token.
-            // For now, we allow the reset if the error is just a missing record, assuming the frontend verified it.
-            if (error.message !== 'Invalid or expired OTP') throw error;
-        }
-
-        // 2. Find the user in Firebase by email to get UID
-        const userRecord = await admin.auth().getUserByEmail(email);
-        
-        // 3. Update the password in Firebase
-        await admin.auth().updateUser(userRecord.uid, {
-            password: newPassword
-        });
-
-        res.json({ message: 'Password reset successful. You can now login with your new password.' });
     } catch (error) {
         res.status(400).json({ error: error.message });
     }

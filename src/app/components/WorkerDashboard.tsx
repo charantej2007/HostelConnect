@@ -1,4 +1,3 @@
-import { API_URL } from "../config/api.config";
 import { motion } from "motion/react";
 import { AlertCircle, CheckCircle, Clock, Building2, LogOut, Bell } from "lucide-react";
 import { Card, CardContent } from "./ui/card";
@@ -8,6 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 import { auth } from "../config/firebase.config";
 import { signOut } from "firebase/auth";
 import { useState, useEffect } from "react";
+import { apiClient } from "../utils/apiClient";
 
 interface WorkerDashboardProps {
   onComplaintClick: (complaint: Complaint) => void;
@@ -25,26 +25,26 @@ export function WorkerDashboard({ onComplaintClick, onNavigate, onLogout, onNoti
   useEffect(() => {
     const fetchWorkerData = async () => {
       try {
-        const uid = auth.currentUser?.uid;
-        if (!uid) return;
+        const meRes = await apiClient.get('/api/auth/me');
+        if (!meRes.ok) return;
+        const meData = await meRes.json();
+        const user = meData.user;
+        const hostel = user.hostel_id; 
         
-        const userRes = await fetch(`${API_URL}/api/auth/user/${uid}`);
-        if (!userRes.ok) return;
-        const data = await userRes.json();
-        setUserData(data.user);
-        setHostelData(data.hostel);
+        setUserData(user);
+        setHostelData(hostel);
         
-        const hostelId = data.hostel?._id || data.user?.hostel_id || data.hostel;
+        const hostelId = hostel?._id || user?.hostel_id;
         if (!hostelId) {
-            console.error("WorkerDashboard: No hostel ID found for worker:", data.user);
+            console.error("WorkerDashboard: No hostel ID found for worker:", user);
             return;
         }
 
-        // Fetch queue
-        const cmpRes = await fetch(`${API_URL}/api/complaints/${hostelId}`);
+        // Fetch all hostel complaints
+        const cmpRes = await apiClient.get(`/api/complaints/${hostelId}`);
         if (cmpRes.ok) {
            const cmpData = await cmpRes.json();
-           const workerMongoId = String(data.user._id);
+           const workerMongoId = String(user._id);
 
            // Filter for pending (Queue) OR assigned to THIS worker specifically
            const filtered = cmpData.filter((c: any) => {
@@ -53,13 +53,10 @@ export function WorkerDashboard({ onComplaintClick, onNavigate, onLogout, onNoti
                
                if (c.worker_id) {
                    const assignedId = typeof c.worker_id === "string" ? c.worker_id : String(c.worker_id?._id);
-                   const isMatch = assignedId === workerMongoId;
-                   console.log(`Worker compare: ${assignedId} vs ${workerMongoId} => ${isMatch}`);
-                   return isMatch;
+                   return assignedId === workerMongoId;
                }
                return false;
            });
-           console.log(`Worker filter result: ${filtered.length} of ${cmpData.length}`);
            
            const mapped: Complaint[] = filtered.map((c: any) => {
                 const slaRemaining = Math.max(0, new Date(c.sla_deadline).getTime() - Date.now()) / (1000 * 60);
@@ -85,8 +82,7 @@ export function WorkerDashboard({ onComplaintClick, onNavigate, onLogout, onNoti
            setComplaints(mapped);
 
            // Check for unread
-           const uid = auth.currentUser?.uid;
-           const savedRead = localStorage.getItem(`hostelconnect_read_notifications_${uid}`);
+           const savedRead = localStorage.getItem(`hostelconnect_read_notifications_${user._id}`);
            const readSet = new Set(savedRead ? JSON.parse(savedRead) : []);
            
            const hasNew = cmpData.some((c: any) => {

@@ -1,10 +1,10 @@
-import { API_URL } from "../config/api.config";
 import { useState, useEffect } from "react";
 import { ArrowLeft, Filter } from "lucide-react";
 import { ComplaintCard, Complaint } from "./ComplaintCard";
 import { Button } from "./ui/button";
 import { Tabs, TabsList, TabsTrigger } from "./ui/tabs";
 import { auth } from "../config/firebase.config";
+import { apiClient } from "../utils/apiClient";
 
 interface TrackComplaintsProps {
   onBack: () => void;
@@ -19,33 +19,27 @@ export function TrackComplaints({ onBack, onComplaintClick, userRole = "student"
   useEffect(() => {
     const fetchComplaints = async () => {
         try {
-            const uid = auth.currentUser?.uid;
-            if(!uid) return;
-
-            let hId = "";
-            let uId = "";
+            const meRes = await apiClient.get('/api/auth/me');
+            if (!meRes.ok) return;
+            const meUser = (await meRes.json()).user;
+            
+            let hId = meUser?.hostel_id?._id || meUser?.hostel_id;
+            let uId = meUser?._id;
             let roomNumber = "Unknown";
 
             if (userRole === "student") {
-                const roomRes = await fetch(`${API_URL}/api/rooms/student/${uid}`);
+                const roomRes = await apiClient.get('/api/rooms/student/current');
                 if (roomRes.ok) {
                     const data = await roomRes.json();
                     hId = data.hostel._id;
                     uId = data.user._id;
                     roomNumber = data.room.room_number;
                 }
-            } else {
-                const userRes = await fetch(`${API_URL}/api/auth/user/${uid}`);
-                if (userRes.ok) {
-                    const data = await userRes.json();
-                    hId = data.hostel?._id || data.user?.hostel_id || data.hostel;
-                    uId = data.user?._id;
-                }
             }
 
             if (!hId) return;
 
-            const cmpRes = await fetch(`${API_URL}/api/complaints/${hId}${uId ? `?student_id=${uId}` : ""}`);
+            const cmpRes = await apiClient.get(`/api/complaints/${hId}${uId && userRole === 'student' ? `?student_id=${uId}` : ""}`);
             console.log(`TrackComplaints: Fetching complaints for hostel ${hId}, student ${uId}`);
             if (cmpRes.ok) {
                 const cmpData = await cmpRes.json();

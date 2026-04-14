@@ -1,4 +1,3 @@
-import { API_URL } from "../config/api.config";
 import { useState } from "react";
 import { ArrowLeft, Upload, X } from "lucide-react";
 import { Button } from "./ui/button";
@@ -8,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { Card } from "./ui/card";
 import { auth } from "../config/firebase.config";
 import { toast } from "sonner";
+import { apiClient } from "../utils/apiClient";
 
 /**
  * Utility to compress Base64 images for storage optimization
@@ -86,39 +86,18 @@ export function RaiseComplaint({ onBack, onSubmit }: RaiseComplaintProps) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-        const uid = auth.currentUser?.uid;
-        if (!uid) return;
-        
-        // Use user endpoint to get ID and hostel safely
-        const userRes = await fetch(`${API_URL}/api/auth/user/${uid}`);
-        if (!userRes.ok) throw new Error("Failed to authenticate user");
-        const userData = await userRes.json();
-
-        let studentId = userData.user?._id;
-        let hostelId = userData.hostel?._id || userData.user?.hostel_id || userData.hostel;
-
-        if (!studentId || !hostelId) {
-            toast.error("User configuration missing. Please log in again.");
-            return;
-        }
-
-        const res = await fetch(`${API_URL}/api/complaints`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                student_id: studentId,
-                hostel_id: hostelId,
-                type: complaintType.toUpperCase(),
-                description: description,
-                attachments: imagePreview ? [imagePreview] : []
-            })
+        const res = await apiClient.post("/api/complaints", {
+            type: complaintType.toUpperCase(),
+            description: description,
+            attachments: imagePreview ? [imagePreview] : []
         });
         
         if (res.ok) {
             toast.success("Complaint submitted successfully!");
             onSubmit();
         } else {
-            toast.error("Failed to submit complaint");
+            const data = await res.json();
+            toast.error(data.error || "Failed to submit complaint");
         }
     } catch(err) {
         toast.error("Network error");

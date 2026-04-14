@@ -1,4 +1,3 @@
-import { API_URL } from "../config/api.config";
 import { motion } from "motion/react";
 import { FileText, AlertCircle, Users, TrendingUp, Clock, CheckCircle, Building2, Settings, LogOut, Bell } from "lucide-react";
 import { Card, CardContent } from "./ui/card";
@@ -8,6 +7,7 @@ import { auth } from "../config/firebase.config";
 import { signOut } from "firebase/auth";
 import { useState, useEffect } from "react";
 import { AnnouncementModal } from "./AnnouncementModal";
+import { apiClient } from "../utils/apiClient";
 
 interface AdminDashboardProps {
   onNavigate: (screen: string) => void;
@@ -26,18 +26,19 @@ export function AdminDashboard({ onNavigate, onComplaintClick, onLogout, onNotif
   useEffect(() => {
     const fetchAdminData = async () => {
       try {
-        const uid = auth.currentUser?.uid;
-        if (!uid) return;
+        const meRes = await apiClient.get('/api/auth/me');
+        if (!meRes.ok) return;
+        const meData = await meRes.json();
+        const user = meData.user;
+        const hostelId = user?.hostel_id?._id || user?.hostel_id;
         
-        const infoRes = await fetch(`${API_URL}/api/hostels/admin-info/${uid}`);
-        if (!infoRes.ok) return;
-        const info = await infoRes.json();
-        setHostelId(info.hostel._id);
+        if (!hostelId) return;
+        setHostelId(hostelId);
         
-        const statsRes = await fetch(`${API_URL}/api/hostels/${info.hostel._id}/stats`);
+        const statsRes = await apiClient.get(`/api/hostels/${hostelId}/stats`);
         if (statsRes.ok) setStatsData(await statsRes.json());
         
-        const cmpRes = await fetch(`${API_URL}/api/complaints/${info.hostel._id}`);
+        const cmpRes = await apiClient.get(`/api/complaints/${hostelId}`);
         if (cmpRes.ok) {
             const cmpData = await cmpRes.json();
             const mapped: Complaint[] = cmpData.slice(0, 5).map((c: any) => ({
@@ -56,7 +57,7 @@ export function AdminDashboard({ onNavigate, onComplaintClick, onLogout, onNotif
             setComplaints(mapped);
 
             // Check for unread
-            const savedRead = localStorage.getItem(`hostelconnect_read_notifications_${uid}`);
+            const savedRead = localStorage.getItem(`hostelconnect_read_notifications_${user._id}`);
             const readSet = new Set(savedRead ? JSON.parse(savedRead) : []);
             
             const hasNew = cmpData.some((c: any) => {

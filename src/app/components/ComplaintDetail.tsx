@@ -1,5 +1,5 @@
-import { API_URL } from "../config/api.config";
 import { auth } from "../config/firebase.config";
+import { apiClient } from "../utils/apiClient";
 import { Button } from "./ui/button";
 import { Card, CardContent } from "./ui/card";
 import { SLATimer } from "./SLATimer";
@@ -75,17 +75,13 @@ export function ComplaintDetail({ complaint, onBack, userRole }: ComplaintDetail
   const handleAcceptJob = async () => {
     setIsLoading(true);
     try {
-      const uid = auth.currentUser?.uid;
-      const res = await fetch(`${API_URL}/api/complaints/${fullId}/accept`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ worker_uid: uid })
-      });
+      const res = await apiClient.put(`/api/complaints/${fullId}/accept`);
       if (res.ok) {
         setCurrentStatus("in-progress");
         toast.success("Task accepted! Move to In Progress.");
       } else {
-        toast.error("Failed to accept task");
+        const data = await res.json();
+        toast.error(data.error || "Failed to accept task");
       }
     } catch {
       toast.error("Network error");
@@ -101,16 +97,15 @@ export function ComplaintDetail({ complaint, onBack, userRole }: ComplaintDetail
     }
     setIsLoading(true);
     try {
-      const res = await fetch(`${API_URL}/api/complaints/${fullId}/resolve`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ proof_image: proofPreview })
+      const res = await apiClient.put(`/api/complaints/${fullId}/resolve`, { 
+        proof_image: proofPreview 
       });
       if (res.ok) {
         setCurrentStatus("resolved");
         toast.success("Proof submitted! Waiting for student approval.");
       } else {
-        toast.error("Failed to submit resolution");
+        const data = await res.json();
+        toast.error(data.error || "Failed to submit resolution");
       }
     } catch {
       toast.error("Network error");
@@ -122,15 +117,13 @@ export function ComplaintDetail({ complaint, onBack, userRole }: ComplaintDetail
   const handleVerify = async () => {
     setIsLoading(true);
     try {
-      const res = await fetch(`${API_URL}/api/complaints/${fullId}/verify`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" }
-      });
+      const res = await apiClient.put(`/api/complaints/${fullId}/verify`);
       if (res.ok) {
         setCurrentStatus("completed");
         toast.success("Resolved! You've marked this as completed.");
       } else {
-        toast.error("Failed to verify completion");
+        const data = await res.json();
+        toast.error(data.error || "Failed to verify completion");
       }
     } catch {
       toast.error("Network error");

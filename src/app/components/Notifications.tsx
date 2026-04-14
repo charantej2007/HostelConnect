@@ -1,8 +1,8 @@
-import { API_URL } from "../config/api.config";
 import { useState, useEffect } from "react";
 import { ArrowLeft, Bell, CheckCircle, Clock, AlertCircle, Wrench, FileText } from "lucide-react";
 import { Card, CardContent } from "./ui/card";
 import { auth } from "../config/firebase.config";
+import { apiClient } from "../utils/apiClient";
 
 interface NotificationsProps {
   onBack: () => void;
@@ -62,43 +62,48 @@ function timeAgo(dateStr: string) {
 }
 
 export function Notifications({ onBack, userRole }: NotificationsProps) {
-  const LOCAL_STORAGE_KEY = `hostelconnect_read_notifications_${auth.currentUser?.uid || 'guest'}`;
+  const [userData, setUserData] = useState<any>(null);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [readIds, setReadIds] = useState<Set<string>>(() => {
-    const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
-    return saved ? new Set(JSON.parse(saved)) : new Set();
-  });
+  const [readIds, setReadIds] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    const fetchSession = async () => {
+        const res = await apiClient.get('/api/auth/me');
+        if (res.ok) {
+            const data = await res.json();
+            setUserData(data.user);
+            const saved = localStorage.getItem(`hostelconnect_read_notifications_${data.user._id}`);
+            if (saved) setReadIds(new Set(JSON.parse(saved)));
+        }
+    };
+    fetchSession();
+  }, []);
 
   // Save readIds whenever they change
   useEffect(() => {
-    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(Array.from(readIds)));
-  }, [readIds, LOCAL_STORAGE_KEY]);
+    if (userData?._id) {
+        localStorage.setItem(`hostelconnect_read_notifications_${userData._id}`, JSON.stringify(Array.from(readIds)));
+    }
+  }, [readIds, userData]);
 
   useEffect(() => {
     const fetchNotifications = async () => {
       try {
-        const uid = auth.currentUser?.uid;
-        if (!uid) return;
+        const meRes = await apiClient.get('/api/auth/me');
+        if (!meRes.ok) { setLoading(false); return; }
+        const meData = await meRes.json();
+        const user = meData.user;
 
-        let hostelId: string | null = null;
-        let userId: string | null = null;
-        let studentId: string | null = null;
-
-        // Get user data
-        const userRes = await fetch(`${API_URL}/api/auth/user/${uid}`);
-        if (userRes.ok) {
-          const data = await userRes.json();
-          userId = data.user?._id;
-          hostelId = data.hostel?._id || data.user?.hostel_id;
-        }
+        let hostelId = user?.hostel_id?._id || user?.hostel_id;
+        let studentId = user?.role === 'student' ? user._id : null;
 
         if (userRole === "student") {
-          const roomRes = await fetch(`${API_URL}/api/rooms/student/${uid}`);
+          const roomRes = await apiClient.get('/api/rooms/student/current');
           if (roomRes.ok) {
             const rd = await roomRes.json();
             hostelId = rd.hostel?._id || hostelId;
-            studentId = rd.user?._id || userId;
+            studentId = rd.user?._id || studentId;
           }
         }
 
@@ -106,10 +111,10 @@ export function Notifications({ onBack, userRole }: NotificationsProps) {
 
         // Fetch complaints
         const url = userRole === "student" && studentId
-          ? `${API_URL}/api/complaints/${hostelId}?student_id=${studentId}`
-          : `${API_URL}/api/complaints/${hostelId}`;
+          ? `/api/complaints/${hostelId}?student_id=${studentId}`
+          : `/api/complaints/${hostelId}`;
 
-        const cmpRes = await fetch(url);
+        const cmpRes = await apiClient.get(url);
         if (!cmpRes.ok) { setLoading(false); return; }
         const complaints = await cmpRes.json();
 

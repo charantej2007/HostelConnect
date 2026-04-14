@@ -1,10 +1,10 @@
-import { API_URL } from "../config/api.config";
 import { motion } from "motion/react";
 import { FileText, Search, Home, Building2, Bell, User, LogOut } from "lucide-react";
 import { Card, CardContent } from "./ui/card";
 import { auth } from "../config/firebase.config";
 import { signOut } from "firebase/auth";
 import { useState, useEffect } from "react";
+import { apiClient } from "../utils/apiClient";
 
 interface StudentDashboardProps {
   onNavigate: (screen: string) => void;
@@ -21,35 +21,33 @@ export function StudentDashboard({ onNavigate, onLogout, onNotifications }: Stud
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const uid = auth.currentUser?.uid;
-        if (!uid) return;
+        const res = await apiClient.get('/api/auth/me');
+        if (!res.ok) return;
+        const data = await res.json();
+        const user = data.user;
+        setUserData(user);
         
-        const userRes = await fetch(`${API_URL}/api/auth/user/${uid}`);
-        if (!userRes.ok) return;
-        const data = await userRes.json();
-        setUserData(data.user);
-        
-        // For students, fetch room info
-        if (data.user?.role === "student") {
-          const roomRes = await fetch(`${API_URL}/api/rooms/student/${uid}`);
+        // For students, fetch room info using the session-based route
+        if (user?.role === "student") {
+          const roomRes = await apiClient.get('/api/rooms/student/current');
           if (roomRes.ok) {
             const roomData = await roomRes.json();
             setRoomData(roomData.room);
           }
         }
         
-        // Fetch complaints with robust ID lookup
-        const hostelId = data.hostel?._id || data.user?.hostel_id || data.hostel;
-        const studentId = data.user?._id;
+        // Fetch complaints
+        const hostelId = user?.hostel_id?._id || user?.hostel_id;
+        const studentId = user?._id;
 
         if (hostelId) {
-          const cmpRes = await fetch(`${API_URL}/api/complaints/${hostelId}?student_id=${studentId}`);
+          const cmpRes = await apiClient.get(`/api/complaints/${hostelId}?student_id=${studentId}`);
           if (cmpRes.ok) {
-             console.log(`StudentDashboard: Found ${complaints.length} complaints for student ${studentId} in hostel ${hostelId}`);
+             const complaints = await cmpRes.json();
              setActiveComplaintsCount(complaints.filter((c:any) => c.status !== 'Completed').length);
              
              // Check for unread
-             const savedRead = localStorage.getItem(`hostelconnect_read_notifications_${uid}`);
+             const savedRead = localStorage.getItem(`hostelconnect_read_notifications_${user?._id}`);
              const readSet = new Set(savedRead ? JSON.parse(savedRead) : []);
              
              const hasNew = complaints.some((c: any) => {

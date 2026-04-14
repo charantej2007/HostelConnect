@@ -1,15 +1,13 @@
 const express = require('express');
 const router = express.Router();
 const Room = require('../models/Room');
+const verifyAuth = require('../middleware/auth');
 
-// GET /api/rooms/student/:uid
-// Get the specific room a student is assigned to
-router.get('/student/:uid', async (req, res) => {
+// GET /api/rooms/student/current
+// Get the specific room for the logged-in student
+router.get('/student/current', verifyAuth, async (req, res) => {
     try {
-        const User = require('../models/User');
-        const user = await User.findOne({ firebase_uid: req.params.uid })
-            .populate('room_id')
-            .populate('hostel_id');
+        const user = req.user; // From verifyAuth middleware
         
         if (!user || user.role !== 'student' || !user.room_id) {
             return res.status(404).json({ error: 'Room not found for student' });

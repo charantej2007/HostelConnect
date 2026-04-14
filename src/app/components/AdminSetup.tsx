@@ -1,4 +1,3 @@
-import { API_URL } from "../config/api.config";
 import { useState } from "react";
 import { Building2, User, Phone, ArrowRight } from "lucide-react";
 import { Card, CardContent } from "./ui/card";
@@ -7,6 +6,7 @@ import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { toast } from "sonner";
 import { auth } from "../config/firebase.config";
+import { apiClient } from "../utils/apiClient";
 
 interface AdminSetupProps {
   onComplete: () => void;
@@ -33,26 +33,19 @@ export function AdminSetup({ onComplete }: AdminSetupProps) {
       return;
     }
 
-    const currentUser = auth.currentUser;
-    if (!currentUser) {
-      toast.error("Session expired. Please log in again.");
-      return;
-    }
-
     setIsLoading(true);
 
     try {
-      const response = await fetch(`${API_URL}/api/auth/admin-signup`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          institutionName: formData.institutionName,
-          adminName: formData.adminName,
-          email: currentUser.email,
-          phone: formData.phoneNumber,
-          firebase_uid: currentUser.uid,
-          maxRooms: 10 // Setup an initial batch of rooms for testing
-        }),
+      // Get the current user's email from session
+      const savedUser = localStorage.getItem("user");
+      const currentEmail = savedUser ? JSON.parse(savedUser).email : "";
+
+      const response = await apiClient.post("/api/auth/admin-signup", {
+        institutionName: formData.institutionName,
+        adminName: formData.adminName,
+        email: currentEmail,
+        phone: formData.phoneNumber,
+        maxRooms: 10
       });
 
       const data = await response.json();
