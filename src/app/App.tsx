@@ -66,10 +66,21 @@ export default function App() {
     if (savedUser && savedToken) {
       try {
         const user = JSON.parse(savedUser);
+        const hostelId = user.hostel_id?._id || user.hostel_id;
         setUserRole(user.role);
-        setActiveHostelId(user.hostel_id?._id || user.hostel_id);
-        setCurrentScreen("dashboard");
-        setActiveTab("dashboard");
+        setActiveHostelId(hostelId);
+        
+        if (!hostelId) {
+          // User signed up but never joined a hostel — send to onboarding
+          if (user.role === "admin") {
+            setCurrentScreen("admin-setup");
+          } else {
+            setCurrentScreen("code-verification");
+          }
+        } else {
+          setCurrentScreen("dashboard");
+          setActiveTab("dashboard");
+        }
       } catch (e) {
         console.error("Failed to parse saved user", e);
         localStorage.clear();
@@ -128,9 +139,14 @@ export default function App() {
     if (userRole === "student") {
       setCurrentScreen("student-onboarding");
     } else {
-      // Register worker to MongoDB automatically using unified API client
+      // Register worker to hostel
       try {
+        const savedUser = localStorage.getItem("user");
+        const currentUser = savedUser ? JSON.parse(savedUser) : {};
+
         const response = await apiClient.post("/api/auth/complete-onboarding", {
+          name: currentUser.name || "",
+          email: currentUser.email || "",
           role: "worker",
           hostel_id: hostelId,
         });
@@ -138,6 +154,7 @@ export default function App() {
         if (response.ok) {
            const data = await response.json();
            localStorage.setItem("user", JSON.stringify(data.user));
+           if (data.token) localStorage.setItem("token", data.token);
         }
       } catch (err) {
         console.error("Worker registration error", err);

@@ -54,7 +54,8 @@ mongoose.connect(process.env.MONGODB_URI)
 const allowedOrigins = [
     'http://localhost:5173',
     'http://localhost:3000',
-    'https://hostelconnect-gg4x.onrender.com', // Replace with your actual frontend domain if different
+    'https://hostelconnect-eg4x.onrender.com',
+    'https://hostel-connect-amber.vercel.app',
     /vercel\.app$/ // Allows all Vercel preview deployments
 ];
 
